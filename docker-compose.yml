@@ -1,0 +1,215 @@
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./infra/kafka/topics.sh:/topics.sh:ro
+    entrypoint: ["/bin/bash", "/topics.sh"]
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sighthog-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: sighthog_user
+      POSTGRES_PASSWORD: sighthog_password
+      POSTGRES_DB: sighthog_metadata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sighthog_user -d sighthog_metadata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: sighthog-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: sighthog
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: password
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user default --password password --query 'SELECT 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  seaweedfs:
+    image: chrislusf/seaweedfs
+    container_name: sighthog-seaweedfs
+    command: server -s3 -s3.port=8333 -dir=/data -master.port=9333
+    ports:
+      - "8333:8333"
+      - "9333:9333"
+    volumes:
+      - seaweed_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/status || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  seaweed-init:
+    image: amazon/aws-cli:2.15.0
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      - SEAWEEDFS_BUCKET=sighthog-replays
+    volumes:
+      - ./infra/seaweed/init.sh:/init.sh:ro
+    entrypoint: ["/bin/bash", "/init.sh"]
+    restart: "no"
+
+  ingest-api:
+    build:
+      context: ./services/ingest-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=sighthog-raw-events
+      - INGEST_API_PORT=8080
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  workers:
+    build:
+      context: ./services/workers
+      dockerfile: Dockerfile
+    container_name: sighthog-workers
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://sighthog_user:sighthog_password@postgres:5432/sighthog_metadata?sslmode=disable
+      - KAFKA_BROKERS=kafka:9092
+      - WORKERS_KAFKA_BROKERS=kafka:9092
+      - WORKERS_KAFKA_TOPIC=sighthog-raw-events
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DATABASE=sighthog
+      - CLICKHOUSE_DB=sighthog
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - SEAWEEDFS_ENDPOINT=http://seaweedfs:8333
+      - SEAWEEDFS_S3_ENDPOINT=http://seaweedfs:8333
+      - SEAWEEDFS_BUCKET=sighthog-replays
+      - SEAWEEDFS_ACCESS_KEY=any
+      - SEAWEEDFS_SECRET_KEY=any
+      - CLICKHOUSE_BATCH_SIZE=2000
+      - CLICKHOUSE_BATCH_INTERVAL_MS=3000
+      - BLOB_FLUSH_INTERVAL_MS=30000
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      seaweed-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  demo:
+    build:
+      context: .
+      dockerfile: apps/demo/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NEXT_PUBLIC_SDK_ENDPOINT=http://localhost:8080/v1/events
+      - HOSTNAME=0.0.0.0
+      - PORT=3001
+    depends_on:
+      ingest-api:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    image: sighthog-dashboard:latest
+    container_name: sighthog-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://sighthog_user:sighthog_password@postgres:5432/sighthog_metadata?sslmode=disable
+      - CLICKHOUSE_HTTP_URL=http://clickhouse:8123
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_DATABASE=sighthog
+      - SEAWEEDFS_ENDPOINT=http://seaweedfs:8333
+      - SEAWEEDFS_BUCKET=sighthog-replays
+      - SEAWEEDFS_ACCESS_KEY=any
+      - SEAWEEDFS_SECRET_KEY=any
+      - NEXT_PUBLIC_DEMO_URL=http://localhost:3001
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  clickhouse_data:
+  seaweed_data:
