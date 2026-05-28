@@ -15,6 +15,8 @@ export default function SightHogProvider({
     initSightHog({
       endpoint,
       flushIntervalMs: 5000,
+      maskAllInputs: true,
+      maskSelectors: ["[data-sensitive]", "input[type='password']"],
     });
   }, []);
 

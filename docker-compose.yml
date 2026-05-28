@@ -154,7 +154,7 @@ services:
       - SEAWEEDFS_SECRET_KEY=any
       - CLICKHOUSE_BATCH_SIZE=2000
       - CLICKHOUSE_BATCH_INTERVAL_MS=3000
-      - BLOB_FLUSH_INTERVAL_MS=30000
+      - BLOB_FLUSH_INTERVAL_MS=5000
     depends_on:
       kafka-init:
         condition: service_completed_successfully

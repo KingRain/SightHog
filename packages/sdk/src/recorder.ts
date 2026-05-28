@@ -1,6 +1,11 @@
 import { record } from "rrweb";
 import { Batcher } from "./batcher";
 import { createFrustrationTracker } from "./frustration";
+import {
+  applyPrivacySelectors,
+  getPrivacyRecordOptions,
+  stopPrivacyObserver,
+} from "./privacy";
 import { clearFrustrationHooks, setFrustrationHooks } from "./telemetry";
 import type { InteractionEvent, TelemetryLog } from "./types";
 
@@ -32,6 +37,9 @@ function scheduleIdle(task: () => void): void {
 export interface RecorderOptions {
   flushIntervalMs: number;
   maxBatchSize?: number;
+  maskSelectors?: string[];
+  blockSelectors?: string[];
+  maskAllInputs?: boolean;
   onFlush: (
     events: unknown[],
     interactions: InteractionEvent[],
@@ -62,10 +70,18 @@ export function startRecorder(options: RecorderOptions): RecorderHandle {
     onError: () => frustrationTracker.onErrorSignal(),
   });
 
+  applyPrivacySelectors(
+    options.maskSelectors ?? [],
+    options.blockSelectors ?? []
+  );
+
+  const privacyOpts = getPrivacyRecordOptions(options.maskAllInputs ?? false);
+
   const stopRecord = record({
     emit(event) {
       batcher.addEvent(event);
     },
+    ...privacyOpts,
   });
 
   const onClick = (event: MouseEvent) => {
@@ -109,6 +125,7 @@ export function startRecorder(options: RecorderOptions): RecorderHandle {
       window.removeEventListener("scroll", onScroll);
       frustrationTracker.destroy();
       clearFrustrationHooks();
+      stopPrivacyObserver();
       stopRecord?.();
       batcher.stop(useBeacon);
     },

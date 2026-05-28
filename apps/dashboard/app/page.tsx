@@ -52,7 +52,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import SessionFilters, {
+  type SessionFilterState,
+} from "@/components/SessionFilters";
 import SessionReplayWorkspace from "@/components/SessionReplayWorkspace";
+import SessionTriageBadges from "@/components/SessionTriageBadges";
+import type { SessionListRow } from "@/app/api/sessions/route";
+import { fetchReplayEvents, waitForReplayReady } from "@/lib/fetch-replay";
 import type { SessionMeta } from "@/components/SessionClientHeader";
 import { type LogItem } from "@/components/TechTimeline";
 import {
@@ -69,17 +75,18 @@ interface MetricRow {
   avg_duration: number;
 }
 
-interface SessionRow {
-  id: string;
-  user_id: string | null;
-  initial_url: string;
-  created_at: string;
-  updated_at: string;
-}
+const defaultFilters: SessionFilterState = {
+  q: "",
+  country: "",
+  hasError: false,
+  hasRage: false,
+};
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [sessions, setSessions] = useState<SessionListRow[]>([]);
+  const [sessionFilters, setSessionFilters] =
+    useState<SessionFilterState>(defaultFilters);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [sessionEvents, setSessionEvents] = useState<unknown[]>([]);
   const [telemetryLogs, setTelemetryLogs] = useState<LogItem[]>([]);
@@ -91,6 +98,8 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [loadingReplay, setLoadingReplay] = useState(false);
+  const [replayProcessing, setReplayProcessing] = useState(false);
+  const [replayWaitAttempt, setReplayWaitAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [funnelSteps, setFunnelSteps] = useState<FunnelStepResult[]>([]);
   const [frustrationSeries, setFrustrationSeries] = useState<
@@ -103,6 +112,23 @@ export default function Dashboard() {
 
   const demoUrl = process.env.NEXT_PUBLIC_DEMO_URL ?? "http://localhost:3001";
 
+  const buildSessionsUrl = useCallback(() => {
+    const params = new URLSearchParams();
+    if (sessionFilters.q) params.set("q", sessionFilters.q);
+    if (sessionFilters.country) params.set("country", sessionFilters.country);
+    if (sessionFilters.hasError) params.set("hasError", "true");
+    if (sessionFilters.hasRage) params.set("hasRage", "true");
+    const qs = params.toString();
+    return qs ? `/api/sessions?${qs}` : "/api/sessions";
+  }, [sessionFilters]);
+
+  const loadSessions = useCallback(async () => {
+    const res = await fetch(buildSessionsUrl());
+    if (res.ok) {
+      setSessions(await res.json());
+    }
+  }, [buildSessionsUrl]);
+
   const loadDashboardData = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
@@ -112,13 +138,11 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      const [metricsRes, sessionsRes, funnelRes, frustrationRes] =
-        await Promise.all([
-          fetch("/api/metrics"),
-          fetch("/api/sessions"),
-          fetch("/api/analytics/funnel"),
-          fetch("/api/analytics/frustration"),
-        ]);
+      const [metricsRes, funnelRes, frustrationRes] = await Promise.all([
+        fetch("/api/metrics"),
+        fetch("/api/analytics/funnel"),
+        fetch("/api/analytics/frustration"),
+      ]);
 
       if (metricsRes.ok) {
         setMetrics(await metricsRes.json());
@@ -126,11 +150,7 @@ export default function Dashboard() {
         throw new Error("Failed to load metrics");
       }
 
-      if (sessionsRes.ok) {
-        setSessions(await sessionsRes.json());
-      } else {
-        throw new Error("Failed to load sessions");
-      }
+      await loadSessions();
 
       if (funnelRes.ok) {
         const funnelData = await funnelRes.json();
@@ -153,11 +173,18 @@ export default function Dashboard() {
       setLoadingData(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadSessions]);
 
   useEffect(() => {
     void loadDashboardData();
   }, [loadDashboardData]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadSessions();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [sessionFilters, loadSessions]);
 
   const registerSeek = useCallback((seek: (timeMs: number) => void) => {
     seekToTimeRef.current = seek;
@@ -196,6 +223,8 @@ export default function Dashboard() {
 
   const loadSessionReplay = async (sessionId: string) => {
     setLoadingReplay(true);
+    setReplayProcessing(true);
+    setReplayWaitAttempt(0);
     setError(null);
     setSelectedSession(sessionId);
     setCurrentVideoTimeMs(0);
@@ -204,26 +233,23 @@ export default function Dashboard() {
     setSessionMeta(null);
 
     try {
-      const [replayRes, telemetryRes, interactionsRes, metaRes] =
-        await Promise.all([
-          fetch(`/api/session/${sessionId}`),
-          fetch(`/api/session/${sessionId}/telemetry`),
-          fetch(`/api/session/${sessionId}/interactions`),
-          fetch(`/api/session/${sessionId}/meta`),
-        ]);
+      await waitForReplayReady(sessionId, setReplayWaitAttempt);
+      setReplayProcessing(false);
 
-      if (!replayRes.ok) {
-        throw new Error("Session replay not found");
-      }
+      const [data, telemetryRes, interactionsRes, metaRes] = await Promise.all([
+        fetchReplayEvents(sessionId),
+        fetch(`/api/session/${sessionId}/telemetry`),
+        fetch(`/api/session/${sessionId}/interactions`),
+        fetch(`/api/session/${sessionId}/meta`),
+      ]);
 
-      const data = await replayRes.json();
       const events = data.events ?? [];
       if (events.length === 0) {
         throw new Error("Session replay not found");
       }
       if (data.hasFullSnapshot === false) {
         setError(
-          "Replay is incomplete (missing DOM snapshot). Use the demo checkout, wait ~30s for flush, then retry.",
+          "Replay is incomplete (missing DOM snapshot). Interact with the demo again, then retry.",
         );
       }
       setSessionEvents(events);
@@ -252,13 +278,18 @@ export default function Dashboard() {
             initial_url: fallback.initial_url,
             user_agent: null,
             client_ip: null,
+            country: fallback.country,
+            browser: fallback.browser,
+            os: fallback.os,
             created_at: fallback.created_at,
           });
         }
       }
-    } catch {
+    } catch (err) {
       setError(
-        "Could not load session replay. Try again after the blob worker flushes (~30s).",
+        err instanceof Error
+          ? err.message
+          : "Could not load session replay. Try again shortly.",
       );
       setSessionEvents([]);
       setTelemetryLogs([]);
@@ -266,6 +297,7 @@ export default function Dashboard() {
       setSessionMeta(null);
     } finally {
       setLoadingReplay(false);
+      setReplayProcessing(false);
     }
   };
 
@@ -541,6 +573,17 @@ export default function Dashboard() {
             <CardContent>
               {selectedSession ? (
                 <div className="space-y-4">
+                  {replayProcessing && (
+                    <Alert>
+                      <AlertTitle>Processing replay</AlertTitle>
+                      <AlertDescription>
+                        Waiting for blob worker to flush recording to storage
+                        {replayWaitAttempt > 0
+                          ? ` (attempt ${replayWaitAttempt})…`
+                          : "…"}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {loadingReplay ? (
                     <div className="space-y-3">
                       <Skeleton className="h-16 w-full rounded-xl" />
@@ -588,52 +631,65 @@ export default function Dashboard() {
                   </EmptyHeader>
                 </Empty>
               ) : (
-                <Table variant="card">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[220px]">Session ID</TableHead>
-                      <TableHead className="min-w-[180px]">URL</TableHead>
-                      <TableHead className="hidden min-w-[160px] md:table-cell">
-                        Updated
-                      </TableHead>
-                      <TableHead className="w-[140px] text-right">
-                        Actions
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sessions.map((session) => (
-                      <TableRow key={session.id}>
-                        <TableCell>
-                          <code className="block max-w-[220px] truncate font-mono text-xs text-foreground sm:max-w-none">
-                            {session.id}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <span className="block max-w-[180px] truncate text-foreground sm:max-w-[280px]">
-                            {session.initial_url}
-                          </span>
-                          <span className="mt-1 text-muted-foreground text-xs md:hidden">
-                            {new Date(session.updated_at).toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell className="hidden text-muted-foreground md:table-cell">
-                          {new Date(session.updated_at).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void loadSessionReplay(session.id)}
-                          >
-                            <Eye />
-                            Watch
-                          </Button>
-                        </TableCell>
+                <div className="space-y-4">
+                  <SessionFilters
+                    value={sessionFilters}
+                    onChange={setSessionFilters}
+                  />
+                  <Table variant="card">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[200px]">Session</TableHead>
+                        <TableHead className="min-w-[160px]">URL</TableHead>
+                        <TableHead className="min-w-[120px]">Signals</TableHead>
+                        <TableHead className="hidden min-w-[140px] md:table-cell">
+                          Updated
+                        </TableHead>
+                        <TableHead className="w-[120px] text-right">
+                          Actions
+                        </TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {sessions.map((session) => (
+                        <TableRow key={session.id}>
+                          <TableCell>
+                            <code className="block max-w-[200px] truncate font-mono text-xs text-foreground">
+                              {session.id.slice(0, 8)}…
+                            </code>
+                            {session.country && (
+                              <span className="mt-1 block text-muted-foreground text-xs">
+                                {session.country}
+                                {session.browser ? ` · ${session.browser}` : ""}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="block max-w-[180px] truncate text-foreground sm:max-w-[260px]">
+                              {session.initial_url}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <SessionTriageBadges triage={session.triage} />
+                          </TableCell>
+                          <TableCell className="hidden text-muted-foreground text-xs md:table-cell">
+                            {new Date(session.updated_at).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void loadSessionReplay(session.id)}
+                            >
+                              <Eye />
+                              Watch
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>

@@ -4,20 +4,31 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Copy,
+  Gauge,
   MousePointerClick,
   Network,
   Terminal,
+  Wrench,
 } from "lucide-react";
 import type { LogItem } from "@/components/TechTimeline";
 import { SLOW_NETWORK_MS } from "@/lib/timeline-feed";
 import { cn } from "@/lib/utils";
 
-type FilterType = "all" | "console" | "network" | "vitals" | "action";
+type DevToolsTab =
+  | "all"
+  | "console"
+  | "network"
+  | "performance"
+  | "errors"
+  | "actions";
 
 const ACTIVE_LOG_THRESHOLD_MS = 1200;
+const SLOW_LCP_MS = 2500;
 
 interface DevLogPanelProps {
   logs: LogItem[];
@@ -32,33 +43,62 @@ export default function DevLogPanel({
   sessionStartTimeMs,
   onSeek,
 }: DevLogPanelProps) {
-  const [filter, setFilter] = useState<FilterType>("all");
+  const [tab, setTab] = useState<DevToolsTab>("all");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
   const userScrolledRef = useRef(false);
 
-  const counts = useMemo(
-    () => ({
-      all: logs.length,
-      console: logs.filter((l) => l.type === "console").length,
-      network: logs.filter((l) => l.type === "network").length,
-      vitals: logs.filter((l) => l.type === "vitals").length,
-      action: logs.filter((l) => l.type === "action").length,
-    }),
-    [logs]
+  const timeFilteredLogs = useMemo(
+    () =>
+      logs.filter((log) => {
+        const relative = log.timestamp - sessionStartTimeMs;
+        return relative <= currentVideoTimeMs;
+      }),
+    [logs, sessionStartTimeMs, currentVideoTimeMs]
   );
 
-  const timeFilteredLogs = logs.filter((log) => {
-    const relative = log.timestamp - sessionStartTimeMs;
-    return relative <= currentVideoTimeMs;
-  });
+  const vitalsSummary = useMemo(() => {
+    const vitals = logs.filter((l) => l.type === "vitals");
+    const latest: Record<string, { value: number; rating?: string }> = {};
+    for (const v of vitals) {
+      const key = v.subType;
+      const value = Number(v.metadata.value ?? 0);
+      latest[key] = { value, rating: String(v.metadata.rating ?? "") };
+    }
+    return latest;
+  }, [logs]);
 
-  const visibleLogs =
-    filter === "all"
-      ? timeFilteredLogs
-      : timeFilteredLogs.filter((log) => log.type === filter);
+  const tabCounts = useMemo(
+    () => ({
+      all: timeFilteredLogs.length,
+      console: timeFilteredLogs.filter((l) => l.type === "console").length,
+      network: timeFilteredLogs.filter((l) => l.type === "network").length,
+      performance: timeFilteredLogs.filter((l) => l.type === "vitals").length,
+      errors: timeFilteredLogs.filter(isErrorEntry).length,
+      actions: timeFilteredLogs.filter((l) => l.type === "action").length,
+    }),
+    [timeFilteredLogs]
+  );
+
+  const visibleLogs = useMemo(() => {
+    switch (tab) {
+      case "console":
+        return timeFilteredLogs.filter((l) => l.type === "console");
+      case "network":
+        return timeFilteredLogs.filter((l) => l.type === "network");
+      case "performance":
+        return timeFilteredLogs.filter((l) => l.type === "vitals");
+      case "errors":
+        return timeFilteredLogs.filter(isErrorEntry);
+      case "actions":
+        return timeFilteredLogs.filter((l) => l.type === "action");
+      default:
+        return timeFilteredLogs;
+    }
+  }, [tab, timeFilteredLogs]);
 
   useEffect(() => {
     if (!autoScroll || userScrolledRef.current) return;
@@ -90,64 +130,101 @@ export default function DevLogPanel({
     }
   };
 
-  const handleFollowChange = (checked: boolean) => {
-    setAutoScroll(checked);
-    if (checked) {
-      userScrolledRef.current = false;
+  const copyText = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      // ignore
     }
   };
+
+  const tabs: {
+    key: DevToolsTab;
+    label: string;
+    icon?: React.ComponentType<{ className?: string }>;
+  }[] = [
+    { key: "all", label: "All" },
+    { key: "errors", label: "Errors", icon: AlertTriangle },
+    { key: "console", label: "Console", icon: Terminal },
+    { key: "network", label: "Network", icon: Network },
+    { key: "performance", label: "Performance", icon: Gauge },
+    { key: "actions", label: "Actions", icon: MousePointerClick },
+  ];
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border bg-card font-mono text-xs">
       <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-          </span>
+          <Wrench className="size-4 text-primary" aria-hidden />
           <span className="font-sans font-semibold text-foreground text-sm">
-            Live logs
+            DevTools
           </span>
           <span className="font-sans text-muted-foreground text-[10px]">
-            synced {(currentVideoTimeMs / 1000).toFixed(1)}s
+            @ {(currentVideoTimeMs / 1000).toFixed(1)}s
           </span>
         </div>
         <label className="flex items-center gap-1.5 font-sans text-[10px] text-muted-foreground">
           <input
             type="checkbox"
             checked={autoScroll}
-            onChange={(e) => handleFollowChange(e.target.checked)}
+            onChange={(e) => {
+              setAutoScroll(e.target.checked);
+              if (e.target.checked) userScrolledRef.current = false;
+            }}
             className="size-3 rounded border-input"
           />
           Follow playhead
         </label>
       </div>
 
+      {(tab === "performance" || tab === "all") && Object.keys(vitalsSummary).length > 0 && (
+        <div className="grid grid-cols-2 gap-1.5 border-b bg-muted/15 p-2 sm:grid-cols-4">
+          {Object.entries(vitalsSummary).map(([name, data]) => {
+            const slow = name === "LCP" && data.value > SLOW_LCP_MS;
+            return (
+              <div
+                key={name}
+                className={cn(
+                  "rounded-md border px-2 py-1.5",
+                  slow ? "border-amber-500/40 bg-amber-500/10" : "bg-background"
+                )}
+              >
+                <p className="font-sans text-[9px] text-muted-foreground uppercase">
+                  {name}
+                </p>
+                <p className="font-semibold tabular-nums text-foreground">
+                  {name === "CLS"
+                    ? data.value.toFixed(3)
+                    : `${Math.round(data.value)}ms`}
+                </p>
+                {data.rating && (
+                  <p className="text-[9px] text-muted-foreground">{data.rating}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="border-b px-2 py-2">
         <div className="flex flex-wrap gap-1">
-          {(
-            [
-              ["all", "All", undefined],
-              ["console", "Console", Terminal],
-              ["network", "Network", Network],
-              ["action", "Actions", MousePointerClick],
-              ["vitals", "Vitals", Activity],
-            ] as const
-          ).map(([key, label, Icon]) => (
+          {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               type="button"
-              onClick={() => setFilter(key)}
+              onClick={() => setTab(key)}
               className={cn(
                 "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] transition",
-                filter === key
+                tab === key
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted"
               )}
             >
               {Icon && <Icon className="size-3" />}
               {label}
-              <span className="opacity-70">{counts[key]}</span>
+              <span className="opacity-70">{tabCounts[key]}</span>
             </button>
           ))}
         </div>
@@ -164,9 +241,12 @@ export default function DevLogPanel({
           const isActive =
             Math.abs(relativeMs - currentVideoTimeMs) <= ACTIVE_LOG_THRESHOLD_MS;
           const expanded = expandedKey === rowKey;
-          const channel = channelLabel(log);
           const styling = getLogRowStyle(log);
           const technicalLine = formatTechnicalSummary(log);
+          const copyPayload =
+            log.type === "network"
+              ? String(log.metadata.url ?? log.message)
+              : log.message;
 
           return (
             <div
@@ -178,54 +258,71 @@ export default function DevLogPanel({
                 isActive && "border-primary/50 bg-primary/8 ring-1 ring-primary/30"
               )}
             >
-              <button
-                type="button"
-                className="flex w-full items-start gap-2 p-2 text-left"
-                onClick={() => {
-                  setExpandedKey(expanded ? null : rowKey);
-                  onSeek?.(relativeMs);
-                }}
-              >
-                <span className="mt-0.5 shrink-0 text-muted-foreground">
-                  {expanded ? (
-                    <ChevronDown className="size-3" />
-                  ) : (
-                    <ChevronRight className="size-3" />
-                  )}
-                </span>
-                <span className="w-[3.25rem] shrink-0 text-right text-[10px] text-muted-foreground tabular-nums">
-                  +{(relativeMs / 1000).toFixed(2)}s
-                </span>
-                <span className="w-9 shrink-0 font-bold text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {channel}
-                </span>
-                <span className="mt-0.5 shrink-0">{renderIcon(log)}</span>
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {log.level && (
-                      <span
-                        className={cn(
-                          "rounded px-1 py-0.5 text-[9px] font-bold uppercase",
-                          styling.badge
-                        )}
-                      >
-                        {log.level}
-                      </span>
+              <div className="flex items-start gap-1 p-1">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-start gap-2 p-1 text-left"
+                  onClick={() => {
+                    setExpandedKey(expanded ? null : rowKey);
+                    onSeek?.(relativeMs);
+                  }}
+                >
+                  <span className="mt-0.5 shrink-0 text-muted-foreground">
+                    {expanded ? (
+                      <ChevronDown className="size-3" />
+                    ) : (
+                      <ChevronRight className="size-3" />
                     )}
-                    <span className="text-[10px] text-muted-foreground">
-                      {log.subType}
-                    </span>
-                  </div>
-                  <p className={cn("break-all leading-snug", styling.text)}>
-                    {log.message}
-                  </p>
-                  {technicalLine && (
-                    <p className="break-all text-[10px] text-muted-foreground leading-relaxed">
-                      {technicalLine}
+                  </span>
+                  <span className="w-[3.25rem] shrink-0 text-right text-[10px] text-muted-foreground tabular-nums">
+                    +{(relativeMs / 1000).toFixed(2)}s
+                  </span>
+                  <span className="w-9 shrink-0 font-bold text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {channelLabel(log)}
+                  </span>
+                  <span className="mt-0.5 shrink-0">{renderIcon(log)}</span>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {log.level && (
+                        <span
+                          className={cn(
+                            "rounded px-1 py-0.5 text-[9px] font-bold uppercase",
+                            styling.badge
+                          )}
+                        >
+                          {log.level}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">
+                        {log.subType}
+                      </span>
+                    </div>
+                    <p className={cn("break-all leading-snug", styling.text)}>
+                      {log.message}
                     </p>
-                  )}
-                </div>
-              </button>
+                    {technicalLine && (
+                      <p className="break-all text-[10px] text-muted-foreground leading-relaxed">
+                        {technicalLine}
+                      </p>
+                    )}
+                  </div>
+                </button>
+                {log.type === "network" && copyPayload && (
+                  <button
+                    type="button"
+                    title="Copy URL"
+                    className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted"
+                    onClick={() => void copyText(copyPayload, rowKey)}
+                  >
+                    <Copy className="size-3" />
+                  </button>
+                )}
+              </div>
+              {copiedKey === rowKey && (
+                <p className="px-3 pb-1 font-sans text-[9px] text-emerald-600">
+                  Copied
+                </p>
+              )}
               {expanded && (
                 <div className="border-t bg-muted/20 px-3 py-2">
                   <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all text-[10px] leading-relaxed text-muted-foreground">
@@ -241,16 +338,28 @@ export default function DevLogPanel({
           <div className="py-16 text-center font-sans text-muted-foreground text-sm">
             {logs.length === 0
               ? "No telemetry for this session."
-              : "No events before current playhead."}
+              : `No ${tab === "all" ? "" : tab} events before playhead.`}
           </div>
         )}
       </div>
 
       <div className="border-t px-3 py-1.5 font-sans text-[10px] text-muted-foreground">
-        {visibleLogs.length} / {logs.length} entries • filter: {filter}
+        {visibleLogs.length} / {logs.length} entries
       </div>
     </div>
   );
+}
+
+function isErrorEntry(log: LogItem): boolean {
+  if (isErrorLog(log)) return true;
+  if (log.type === "action") {
+    return (
+      log.subType === "error_click" ||
+      log.subType === "rage_click" ||
+      log.subType === "dead_click"
+    );
+  }
+  return false;
 }
 
 function channelLabel(log: LogItem): string {
@@ -277,10 +386,10 @@ function isErrorLog(log: LogItem): boolean {
 
 function formatTechnicalSummary(log: LogItem): string | null {
   if (log.type === "network") {
+    const method = log.metadata.method ?? "GET";
     const status = log.metadata.status ?? "?";
     const ms = log.metadata.durationMs ?? "?";
-    const ok = log.metadata.ok === true ? "ok=true" : "ok=false";
-    return `HTTP ${status} • ${ms}ms • ${ok}`;
+    return `${method} • HTTP ${status} • ${ms}ms`;
   }
   if (log.type === "action") {
     const target = log.metadata.target ?? log.message;
@@ -301,24 +410,24 @@ function formatTechnicalSummary(log: LogItem): string | null {
 }
 
 function getLogRowStyle(log: LogItem) {
-  if (isErrorLog(log)) {
+  if (isErrorLog(log) || log.subType === "rage_click" || log.subType === "error_click") {
     return {
       container: "border-destructive/35 bg-destructive/5",
       badge: "bg-destructive/20 text-destructive",
       text: "text-destructive",
     };
   }
-  if (log.level === "warn" || isSlowNetwork(log)) {
+  if (log.level === "warn" || isSlowNetwork(log) || log.subType === "dead_click") {
     return {
       container: "border-amber-500/35 bg-amber-500/5",
-      badge: "bg-amber-500/20 text-amber-700 dark:text-amber-400",
+      badge: "bg-amber-500/20 text-amber-700",
       text: "text-foreground",
     };
   }
   if (log.type === "action") {
     return {
       container: "border-sky-500/30 bg-sky-500/5",
-      badge: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
+      badge: "bg-sky-500/15 text-sky-700",
       text: "text-foreground",
     };
   }
@@ -365,7 +474,6 @@ function formatInspectionBlock(log: LogItem): string {
       level: log.level,
       message: log.message,
       timestamp: log.timestamp,
-      relativeMs: log.timestamp,
       ...log.metadata,
     },
     null,

@@ -1,4 +1,5 @@
 import { initGuide, stopGuide } from "./guide";
+import { stopPrivacyObserver } from "./privacy";
 import { startRecorder, type RecorderHandle } from "./recorder";
 import { initializeTelemetry, stopTelemetry } from "./telemetry";
 import { sendBatch } from "./transport";
@@ -137,6 +138,9 @@ export function initSightHog(options: SightHogOptions): void {
   recorderHandle = startRecorder({
     flushIntervalMs,
     maxBatchSize: options.maxBatchSize,
+    maskSelectors: options.maskSelectors,
+    blockSelectors: options.blockSelectors,
+    maskAllInputs: options.maskAllInputs,
     onFlush: (events, interactions, telemetry, useBeacon) => {
       const batch = buildBatch(events, interactions, telemetry);
       void sendBatch(endpoint, batch, useBeacon);
@@ -165,6 +169,7 @@ export function stopSightHog(): void {
   recorderHandle?.stop(false);
   recorderHandle = null;
   stopGuide();
+  stopPrivacyObserver();
 }
 
 export function trackEvent(eventName: string, metricValue = 1): void {

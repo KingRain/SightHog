@@ -43,6 +43,12 @@ export interface SightHogOptions {
   userId?: string;
   flushIntervalMs?: number;
   maxBatchSize?: number;
+  /** CSS selectors whose text should be masked in replay */
+  maskSelectors?: string[];
+  /** CSS selectors excluded from replay (e.g. chat widgets) */
+  blockSelectors?: string[];
+  /** Mask all input fields (passwords, emails, etc.) */
+  maskAllInputs?: boolean;
 }
 
 export interface GuideMessage {
