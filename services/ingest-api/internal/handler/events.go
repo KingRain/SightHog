@@ -7,19 +7,23 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sighthog/ingest-api/internal/geoip"
 	"github.com/sighthog/ingest-api/internal/kafka"
 	"github.com/sighthog/ingest-api/internal/pii"
+	"github.com/sighthog/ingest-api/internal/useragent"
 	"github.com/sighthog/ingest-api/internal/validation"
 )
 
 type EventsHandler struct {
 	producer *kafka.Producer
+	geoip    *geoip.Resolver
 	logger   *slog.Logger
 }
 
-func NewEventsHandler(producer *kafka.Producer, logger *slog.Logger) *EventsHandler {
+func NewEventsHandler(producer *kafka.Producer, geo *geoip.Resolver, logger *slog.Logger) *EventsHandler {
 	return &EventsHandler{
 		producer: producer,
+		geoip:    geo,
 		logger:   logger,
 	}
 }
@@ -71,17 +75,30 @@ func (h *EventsHandler) IngestEvents(c *gin.Context) {
 		}
 	}
 
+	ip := clientIP(c)
+	ua := c.GetHeader("User-Agent")
+	browser, osName := useragent.ParseBrowserOS(ua)
+	country := geoip.UnknownCountry
+	if h.geoip != nil {
+		country = h.geoip.CountryCode(ip)
+	}
+
 	enriched := validation.EnrichedPayload{
 		SessionID:    payload.SessionID,
 		UserID:       payload.UserID,
+		VisitorID:    payload.VisitorID,
+		Referrer:     payload.Referrer,
 		URL:          payload.URL,
 		Timestamp:    payload.Timestamp,
 		Events:       maskedEvents,
 		Interactions: maskedInteractions,
 		Telemetry:    maskedTelemetry,
 		ReceivedAt:   time.Now().UTC().UnixMilli(),
-		ClientIP:     clientIP(c),
-		UserAgent:    c.GetHeader("User-Agent"),
+		ClientIP:     ip,
+		UserAgent:    ua,
+		Country:      country,
+		Browser:      browser,
+		OS:           osName,
 	}
 
 	if err := h.producer.Publish(c.Request.Context(), payload.SessionID, enriched); err != nil {

@@ -10,7 +10,6 @@ import {
   Filter,
   Flame,
   Layers,
-  PieChart,
   RefreshCw,
   Trash2,
   Users,
@@ -19,7 +18,6 @@ import { FunnelChart } from "@/components/analytics/funnel-chart";
 import { FrustrationFeed } from "@/components/analytics/frustration-feed";
 import {
   AverageMetricChart,
-  EventDistributionChart,
   EventVolumeChart,
 } from "@/components/analytics/metrics-charts";
 import type { FunnelStepResult } from "@/app/api/analytics/funnel/route";
@@ -455,36 +453,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-2 xl:col-span-1">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <PieChart className="size-4 text-muted-foreground" />
-                <CardTitle className="text-base">Event Distribution</CardTitle>
-              </div>
-              <CardDescription className="text-xs">
-                Share of total events by type
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex justify-center pt-0">
-              {loadingData ? (
-                <Skeleton className="size-[200px] rounded-full" />
-              ) : metrics.length === 0 ? (
-                <Empty className="py-6">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <PieChart />
-                    </EmptyMedia>
-                    <EmptyTitle>No distribution data</EmptyTitle>
-                    <EmptyDescription>
-                      Generate events from the demo to see the breakdown.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <EventDistributionChart metrics={metrics} />
-              )}
-            </CardContent>
-          </Card>
         </section>
 
         <section className="mb-8">

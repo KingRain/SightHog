@@ -116,6 +116,9 @@ services:
       - KAFKA_TOPIC=sighthog-raw-events
       - INGEST_API_PORT=8080
       - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+      - GEOLITE2_DB_PATH=/geo/GeoLite2-Country.mmdb
+    volumes:
+      - ./infra/geoip:/geo:ro
     depends_on:
       kafka-init:
         condition: service_completed_successfully

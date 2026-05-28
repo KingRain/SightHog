@@ -8,20 +8,26 @@ const DEFAULT_FLUSH_INTERVAL_MS = 5000;
 
 let recorderHandle: RecorderHandle | null = null;
 let sessionId = "";
+let visitorId = "";
+let referrer = "";
 let endpoint = "";
 let userId: string | undefined;
 
 const SESSION_STORAGE_KEY = "sighthog:sessionId";
 const USER_STORAGE_KEY = "sighthog:userId";
+const VISITOR_STORAGE_KEY = "sighthog:visitorId";
 
-function createSessionId(): string {
+function createId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
-  return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function getOrCreateStoredId(key: string, factory: () => string): string {
+function getOrCreateSessionStorageId(
+  key: string,
+  factory: () => string
+): string {
   if (typeof window === "undefined") {
     return factory();
   }
@@ -38,8 +44,29 @@ function getOrCreateStoredId(key: string, factory: () => string): string {
   }
 }
 
+function getOrCreateLocalStorageId(key: string, factory: () => string): string {
+  if (typeof window === "undefined") {
+    return factory();
+  }
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) {
+      return existing;
+    }
+    const created = factory();
+    localStorage.setItem(key, created);
+    return created;
+  } catch {
+    return factory();
+  }
+}
+
 export function getSightHogSessionId(): string {
   return sessionId;
+}
+
+export function getSightHogVisitorId(): string {
+  return visitorId;
 }
 
 export function resetSightHogSession(): void {
@@ -62,12 +89,17 @@ function buildBatch(
 ): EventBatch {
   const batch: EventBatch = {
     sessionId,
-    userId,
+    visitorId,
+    referrer,
     url: window.location.href,
     timestamp: Date.now(),
     events,
     interactions,
   };
+
+  if (userId) {
+    batch.userId = userId;
+  }
 
   if (telemetry.length > 0) {
     batch.telemetry = telemetry;
@@ -84,9 +116,21 @@ export function initSightHog(options: SightHogOptions): void {
   endpoint = options.endpoint;
   sessionId =
     options.sessionId ??
-    getOrCreateStoredId(SESSION_STORAGE_KEY, createSessionId);
-  userId =
-    options.userId ?? getOrCreateStoredId(USER_STORAGE_KEY, () => sessionId);
+    getOrCreateSessionStorageId(SESSION_STORAGE_KEY, createId);
+  visitorId = getOrCreateLocalStorageId(VISITOR_STORAGE_KEY, createId);
+  userId = options.userId;
+
+  if (options.userId && typeof window !== "undefined") {
+    try {
+      sessionStorage.setItem(USER_STORAGE_KEY, options.userId);
+    } catch {
+      // ignore
+    }
+  }
+
+  if (typeof document !== "undefined") {
+    referrer = document.referrer ?? "";
+  }
 
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
 

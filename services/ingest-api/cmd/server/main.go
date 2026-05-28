@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sighthog/ingest-api/internal/config"
+	"github.com/sighthog/ingest-api/internal/geoip"
 	"github.com/sighthog/ingest-api/internal/handler"
 	"github.com/sighthog/ingest-api/internal/kafka"
 	"github.com/sighthog/ingest-api/internal/middleware"
@@ -23,13 +24,16 @@ func main() {
 	producer := kafka.NewProducer(cfg.KafkaBrokers, cfg.KafkaTopic)
 	defer producer.Close()
 
+	geoResolver := geoip.NewResolver(cfg.GeoLite2DBPath, logger)
+	defer geoResolver.Close()
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.CORS(cfg.CORSAllowOrigins))
 	router.Use(middleware.RequestID())
 
-	eventsHandler := handler.NewEventsHandler(producer, logger)
+	eventsHandler := handler.NewEventsHandler(producer, geoResolver, logger)
 	router.GET("/healthz", eventsHandler.Healthz)
 	router.POST("/v1/events", gin.HandlerFunc(func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, cfg.MaxBodyBytes)

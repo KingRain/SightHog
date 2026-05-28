@@ -11,7 +11,19 @@ export async function GET(
     const pool = getPostgresPool();
     const result = await pool.query(
       `
-      SELECT id, user_id, initial_url, user_agent, client_ip, created_at, updated_at
+      SELECT
+        id,
+        user_id,
+        initial_url,
+        user_agent,
+        client_ip,
+        visitor_id,
+        country,
+        browser,
+        os,
+        referrer,
+        created_at,
+        updated_at
       FROM sessions
       WHERE id = $1
       LIMIT 1

@@ -12,3 +12,4 @@ apps/demo/dist/
 apps/demo/.next/
 apps/dashboard/.next/
 apps/dashboard/node_modules/
+infra/geoip/*.mmdb

@@ -37,6 +37,7 @@ export default function DevLogPanel({
   const [autoScroll, setAutoScroll] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
+  const userScrolledRef = useRef(false);
 
   const counts = useMemo(
     () => ({
@@ -60,12 +61,44 @@ export default function DevLogPanel({
       : timeFilteredLogs.filter((log) => log.type === filter);
 
   useEffect(() => {
-    if (!autoScroll || !activeRowRef.current || !containerRef.current) return;
-    activeRowRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!autoScroll || userScrolledRef.current) return;
+    if (!activeRowRef.current || !containerRef.current) return;
+
+    const container = containerRef.current;
+    const row = activeRowRef.current;
+    const rowTop = row.offsetTop;
+    const rowBottom = rowTop + row.offsetHeight;
+    const viewTop = container.scrollTop;
+    const viewBottom = viewTop + container.clientHeight;
+
+    if (rowTop < viewTop) {
+      container.scrollTop = rowTop;
+    } else if (rowBottom > viewBottom) {
+      container.scrollTop = rowBottom - container.clientHeight;
+    }
   }, [currentVideoTimeMs, autoScroll, visibleLogs.length]);
 
+  const handleContainerScroll = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const atBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      24;
+    if (!atBottom) {
+      userScrolledRef.current = true;
+      setAutoScroll(false);
+    }
+  };
+
+  const handleFollowChange = (checked: boolean) => {
+    setAutoScroll(checked);
+    if (checked) {
+      userScrolledRef.current = false;
+    }
+  };
+
   return (
-    <div className="flex h-full min-h-[520px] w-full flex-col overflow-hidden rounded-xl border bg-card font-mono text-xs">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border bg-card font-mono text-xs">
       <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span className="relative flex size-2">
@@ -83,7 +116,7 @@ export default function DevLogPanel({
           <input
             type="checkbox"
             checked={autoScroll}
-            onChange={(e) => setAutoScroll(e.target.checked)}
+            onChange={(e) => handleFollowChange(e.target.checked)}
             className="size-3 rounded border-input"
           />
           Follow playhead
@@ -120,7 +153,11 @@ export default function DevLogPanel({
         </div>
       </div>
 
-      <div ref={containerRef} className="flex-1 space-y-1 overflow-y-auto p-2">
+      <div
+        ref={containerRef}
+        onScroll={handleContainerScroll}
+        className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2"
+      >
         {visibleLogs.map((log, index) => {
           const rowKey = `${log.timestamp}-${log.type}-${index}`;
           const relativeMs = log.timestamp - sessionStartTimeMs;

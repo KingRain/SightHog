@@ -14,6 +14,11 @@ type EventRow struct {
 	URL         string
 	EventName   string
 	MetricValue float64
+	Country     string
+	VisitorID   string
+	Browser     string
+	OS          string
+	Referrer    string
 	Timestamp   time.Time
 }
 
@@ -51,7 +56,8 @@ func (w *ClickHouseWriter) FlushEvents(ctx context.Context, rows []EventRow) err
 
 	batch, err := w.conn.PrepareBatch(ctx, `
 		INSERT INTO sighthog.events (
-			session_id, user_id, url, event_name, metric_value, timestamp
+			session_id, user_id, url, event_name, metric_value,
+			country, visitor_id, browser, os, referrer, timestamp
 		)
 	`)
 	if err != nil {
@@ -65,6 +71,11 @@ func (w *ClickHouseWriter) FlushEvents(ctx context.Context, rows []EventRow) err
 			row.URL,
 			row.EventName,
 			row.MetricValue,
+			row.Country,
+			row.VisitorID,
+			row.Browser,
+			row.OS,
+			row.Referrer,
 			row.Timestamp,
 		); err != nil {
 			return fmt.Errorf("append event row: %w", err)

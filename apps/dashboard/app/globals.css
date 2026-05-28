@@ -210,8 +210,8 @@
 }
 
 .replay-shell .replay-controls-bar svg {
-  color: #fff;
-  stroke: #fff;
+  color: currentColor;
+  stroke: currentColor;
 }
 
 .replay-shell .replay-timeline-track:focus-visible {

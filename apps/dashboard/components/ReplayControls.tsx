@@ -101,11 +101,11 @@ export default function ReplayControls({
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="hidden items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-white/60 sm:inline-flex">
-          <Gauge className="size-3.5 text-white" aria-hidden />
+        <span className="hidden items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:inline-flex">
+          <Gauge className="size-3.5" aria-hidden />
           Speed
         </span>
-        <div className="replay-speed-segment inline-flex items-center overflow-hidden rounded-md border border-white/15 bg-white/5">
+        <div className="replay-speed-segment inline-flex items-center overflow-hidden rounded-md border border-border bg-muted/50">
           {SPEED_OPTIONS.map((speed) => (
             <button
               key={speed}
@@ -115,9 +115,9 @@ export default function ReplayControls({
               aria-pressed={currentSpeed === speed}
               className={cn(
                 "min-w-[2.5rem] px-2 py-1.5 text-[11px] font-semibold tabular-nums transition",
-                "text-white/80 hover:bg-white/10 disabled:opacity-40",
+                "text-muted-foreground hover:bg-accent disabled:opacity-40",
                 currentSpeed === speed &&
-                  "bg-primary text-white shadow-sm"
+                  "bg-primary text-primary-foreground shadow-sm"
               )}
               onClick={() => handleSpeed(speed)}
             >
@@ -127,8 +127,8 @@ export default function ReplayControls({
         </div>
       </div>
 
-      <div className="hidden items-center gap-1 text-[10px] text-white/50 lg:flex">
-        <FastForward className="size-3 text-white/70" aria-hidden />
+      <div className="hidden items-center gap-1 text-[10px] text-muted-foreground lg:flex">
+        <FastForward className="size-3" aria-hidden />
         <span>Skip inactive jumps dead air</span>
       </div>
     </div>
@@ -156,8 +156,8 @@ function IconButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex size-9 items-center justify-center rounded-md border border-white/15 transition",
-        "text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex size-9 items-center justify-center rounded-md border border-border transition",
+        "text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40",
         active && "border-primary/50 bg-primary/25 ring-1 ring-primary/40"
       )}
     >

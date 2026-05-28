@@ -1,6 +1,6 @@
 "use client";
 
-import { List, MessageSquare, Share2, User } from "lucide-react";
+import { Globe, List, MessageSquare, Share2, User } from "lucide-react";
 import { parseUserAgent } from "@/lib/parse-user-agent";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,11 @@ export interface SessionMeta {
   initial_url: string;
   user_agent: string | null;
   client_ip: string | null;
+  country?: string | null;
+  visitor_id?: string | null;
+  browser?: string | null;
+  os?: string | null;
+  referrer?: string | null;
   created_at: string;
 }
 
@@ -41,8 +46,15 @@ export default function SessionClientHeader({
   meta,
   className,
 }: SessionClientHeaderProps) {
-  const { browser, os } = parseUserAgent(meta.user_agent);
-  const location = meta.client_ip ? `${meta.client_ip}` : "Local / unknown";
+  const parsed = parseUserAgent(meta.user_agent);
+  const browser = meta.browser ?? parsed.browser;
+  const os = meta.os ?? parsed.os;
+  const location =
+    meta.country && meta.country !== "Unknown"
+      ? meta.country
+      : meta.client_ip
+        ? meta.client_ip
+        : "Local / unknown";
 
   return (
     <div
@@ -52,7 +64,7 @@ export default function SessionClientHeader({
       )}
     >
       <div className="flex items-center gap-3">
-        <div className="flex size-11 items-center justify-center rounded-full bg-teal-600/90 text-white shadow-sm">
+        <div className="flex size-11 items-center justify-center rounded-full bg-primary/15 text-primary shadow-sm">
           <User className="size-5" />
         </div>
         <div>
@@ -62,7 +74,10 @@ export default function SessionClientHeader({
           <p className="mt-0.5 text-muted-foreground text-xs">
             {formatSessionTime(meta.created_at)}
             <span className="mx-1.5 text-border">•</span>
-            {location}
+            <span className="inline-flex items-center gap-0.5">
+              <Globe className="size-3" aria-hidden />
+              {location}
+            </span>
             <span className="mx-1.5 text-border">•</span>
             {browser}
             <span className="mx-1.5 text-border">•</span>

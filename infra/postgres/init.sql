@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     initial_url TEXT NOT NULL,
     user_agent TEXT,
     client_ip VARCHAR(45),
+    visitor_id VARCHAR(255),
+    country VARCHAR(8),
+    browser VARCHAR(64),
+    os VARCHAR(64),
+    referrer TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

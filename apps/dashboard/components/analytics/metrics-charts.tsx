@@ -5,22 +5,18 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   XAxis,
   YAxis,
 } from "recharts";
 import {
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { Cell } from "recharts";
 
 export interface MetricRow {
   event_name: string;
@@ -41,24 +37,6 @@ const avgChartConfig = {
     color: "var(--chart-2)",
   },
 } satisfies ChartConfig;
-
-function buildDistributionConfig(metrics: MetricRow[]): ChartConfig {
-  const palette = [
-    "var(--chart-1)",
-    "var(--chart-2)",
-    "var(--chart-3)",
-    "var(--chart-4)",
-    "var(--chart-5)",
-  ];
-
-  return metrics.reduce<ChartConfig>((config, row, index) => {
-    config[row.event_name] = {
-      label: row.event_name,
-      color: palette[index % palette.length],
-    };
-    return config;
-  }, {});
-}
 
 interface AnalyticsChartsProps {
   metrics: MetricRow[];
@@ -141,44 +119,6 @@ export function AverageMetricChart({ metrics }: AnalyticsChartsProps) {
           activeDot={{ r: 6 }}
         />
       </LineChart>
-    </ChartContainer>
-  );
-}
-
-export function EventDistributionChart({ metrics }: AnalyticsChartsProps) {
-  const chartConfig = useMemo(
-    () => buildDistributionConfig(metrics),
-    [metrics],
-  );
-
-  const chartData = useMemo(
-    () =>
-      metrics.map((row) => ({
-        event_name: row.event_name,
-        total_count: Number(row.total_count),
-        fill: `var(--color-${row.event_name})`,
-      })),
-    [metrics],
-  );
-
-  return (
-    <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[200px] w-full max-w-[220px]">
-      <PieChart accessibilityLayer>
-        <ChartTooltip content={<ChartTooltipContent nameKey="event_name" />} />
-        <Pie
-          data={chartData}
-          dataKey="total_count"
-          nameKey="event_name"
-          innerRadius={42}
-          outerRadius={68}
-          paddingAngle={3}
-          strokeWidth={2}
-        />
-        <ChartLegend
-          content={<ChartLegendContent nameKey="event_name" />}
-          className="flex-wrap gap-2 text-[11px]"
-        />
-      </PieChart>
     </ChartContainer>
   );
 }

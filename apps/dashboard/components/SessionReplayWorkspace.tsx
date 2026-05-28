@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useReplayKeyboard } from "@/hooks/useReplayKeyboard";
 import type { LogItem } from "@/components/TechTimeline";
 import DevLogPanel from "@/components/DevLogPanel";
 import ReplayPlayer from "@/components/ReplayPlayer";
@@ -87,6 +88,18 @@ export default function SessionReplayWorkspace({
     handleSeek(page.startTimeMs);
   };
 
+  useReplayKeyboard({
+    controller,
+    isPlaying,
+    currentTimeMs: currentVideoTimeMs,
+    currentSpeed,
+    totalDurationMs,
+    onSeek: handleSeek,
+    onPlayStateChange: setIsPlaying,
+    onSpeedChange: setCurrentSpeed,
+    enabled: events.length > 0,
+  });
+
   return (
     <div className="space-y-3">
       <SessionClientHeader meta={sessionMeta} />
@@ -99,8 +112,8 @@ export default function SessionReplayWorkspace({
         />
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
-        <div className="min-w-0 space-y-3">
+      <div className="grid max-h-[calc(100vh-14rem)] min-h-0 gap-4 xl:grid-cols-[1fr_340px]">
+        <div className="flex min-h-0 min-w-0 flex-col space-y-3 overflow-hidden">
           <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
             <div className="border-b bg-muted/20 px-4 py-2">
               <p className="font-medium text-foreground text-sm">
@@ -140,12 +153,14 @@ export default function SessionReplayWorkspace({
           />
         </div>
 
-        <DevLogPanel
-          logs={logs}
-          currentVideoTimeMs={currentVideoTimeMs}
-          sessionStartTimeMs={startMs}
-          onSeek={handleSeek}
-        />
+        <div className="flex min-h-0 max-h-full flex-col overflow-hidden">
+          <DevLogPanel
+            logs={logs}
+            currentVideoTimeMs={currentVideoTimeMs}
+            sessionStartTimeMs={startMs}
+            onSeek={handleSeek}
+          />
+        </div>
       </div>
     </div>
   );

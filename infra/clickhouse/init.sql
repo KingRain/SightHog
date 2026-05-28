@@ -6,6 +6,11 @@ CREATE TABLE IF NOT EXISTS sighthog.events (
     url String,
     event_name String,
     metric_value Float64,
+    country LowCardinality(String) DEFAULT 'Unknown',
+    visitor_id String DEFAULT '',
+    browser LowCardinality(String) DEFAULT 'Unknown',
+    os LowCardinality(String) DEFAULT 'Unknown',
+    referrer String DEFAULT '',
     timestamp DateTime64(3),
     created_at DateTime DEFAULT now()
 ) ENGINE = MergeTree()

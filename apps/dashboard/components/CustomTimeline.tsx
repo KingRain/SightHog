@@ -165,10 +165,10 @@ export default function CustomTimeline({
         })}
       </div>
 
-      <div className="flex items-center justify-between text-[10px] tabular-nums text-white/70">
+      <div className="flex items-center justify-between text-[10px] tabular-nums text-muted-foreground">
         <span>{formatClock(currentTimeMs)}</span>
         {hoveredMarker && (
-          <span className="max-w-[55%] truncate text-center text-white/90">
+          <span className="max-w-[55%] truncate text-center text-foreground">
             {hoveredMarker.label}
           </span>
         )}

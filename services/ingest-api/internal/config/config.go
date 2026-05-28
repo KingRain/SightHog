@@ -12,6 +12,7 @@ type Config struct {
 	Port             string
 	MaxBodyBytes     int64
 	CORSAllowOrigins []string
+	GeoLite2DBPath   string
 }
 
 func Load() Config {
@@ -43,6 +44,7 @@ func Load() Config {
 		Port:             port,
 		MaxBodyBytes:     maxBody,
 		CORSAllowOrigins: parseCSVEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"),
+		GeoLite2DBPath:   os.Getenv("GEOLITE2_DB_PATH"),
 	}
 }
 

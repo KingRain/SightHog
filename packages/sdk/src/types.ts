@@ -28,6 +28,8 @@ export interface InteractionEvent {
 export interface EventBatch {
   sessionId: string;
   userId?: string;
+  visitorId?: string;
+  referrer?: string;
   url: string;
   timestamp: number;
   events: unknown[];

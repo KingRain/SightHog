@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import DashboardNav from "@/components/DashboardNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,9 +13,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className="relative antialiased">
-        <div className="isolate relative flex min-h-svh flex-col">{children}</div>
+    <html lang="en">
+      <body className="relative bg-background text-foreground antialiased">
+        <div className="isolate relative flex min-h-svh flex-col">
+          <DashboardNav />
+          <main className="flex-1">{children}</main>
+        </div>
       </body>
     </html>
   );

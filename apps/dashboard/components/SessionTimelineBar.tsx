@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   ChevronDown,
   Gauge,
+  Keyboard,
   Maximize2,
   Pause,
   Play,
@@ -255,6 +256,13 @@ export default function SessionTimelineBar({
           </ToolIcon>
         </div>
       </div>
+
+      <p className="flex items-center justify-center gap-1.5 border-t px-3 py-1.5 font-sans text-[10px] text-muted-foreground">
+        <Keyboard className="size-3 shrink-0" aria-hidden />
+        <span>
+          Space play/pause · ←/→ seek · Home/End · ,/. speed
+        </span>
+      </p>
     </div>
   );
 }

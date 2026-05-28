@@ -24,6 +24,8 @@ type TelemetryLog struct {
 type EventPayload struct {
 	SessionID    string         `json:"sessionId"`
 	UserID       string         `json:"userId,omitempty"`
+	VisitorID    string         `json:"visitorId,omitempty"`
+	Referrer     string         `json:"referrer,omitempty"`
 	URL          string         `json:"url"`
 	Timestamp    int64          `json:"timestamp"`
 	Events       []any          `json:"events"`
@@ -34,6 +36,8 @@ type EventPayload struct {
 type EnrichedPayload struct {
 	SessionID    string         `json:"sessionId"`
 	UserID       string         `json:"userId,omitempty"`
+	VisitorID    string         `json:"visitorId,omitempty"`
+	Referrer     string         `json:"referrer,omitempty"`
 	URL          string         `json:"url"`
 	Timestamp    int64          `json:"timestamp"`
 	Events       []any          `json:"events"`
@@ -42,6 +46,9 @@ type EnrichedPayload struct {
 	ReceivedAt   int64          `json:"receivedAt"`
 	ClientIP     string         `json:"clientIp"`
 	UserAgent    string         `json:"userAgent"`
+	Country      string         `json:"country"`
+	Browser      string         `json:"browser"`
+	OS           string         `json:"os"`
 }
 
 func Validate(payload *EventPayload) error {

@@ -45,17 +45,39 @@ func (p *MetricsPipeline) Stop() {
 	p.telemetryBatcher.Stop()
 }
 
-func (p *MetricsPipeline) Handle(_ context.Context, payload models.EnrichedPayload) error {
-	ts := writer.MsToTime(payload.Timestamp)
+func eventRowFromPayload(payload models.EnrichedPayload, eventName string, metricValue float64, ts int64) writer.EventRow {
+	country := payload.Country
+	if country == "" {
+		country = "Unknown"
+	}
+	browser := payload.Browser
+	if browser == "" {
+		browser = "Unknown"
+	}
+	osName := payload.OS
+	if osName == "" {
+		osName = "Unknown"
+	}
 
-	if err := p.eventsBatcher.Add(writer.EventRow{
+	return writer.EventRow{
 		SessionID:   payload.SessionID,
 		UserID:      payload.UserID,
 		URL:         payload.URL,
-		EventName:   "pageview",
-		MetricValue: 1,
-		Timestamp:   ts,
-	}); err != nil {
+		EventName:   eventName,
+		MetricValue: metricValue,
+		Country:     country,
+		VisitorID:   payload.VisitorID,
+		Browser:     browser,
+		OS:          osName,
+		Referrer:    payload.Referrer,
+		Timestamp:   writer.MsToTime(ts),
+	}
+}
+
+func (p *MetricsPipeline) Handle(_ context.Context, payload models.EnrichedPayload) error {
+	ts := payload.Timestamp
+
+	if err := p.eventsBatcher.Add(eventRowFromPayload(payload, "pageview", 1, ts)); err != nil {
 		return err
 	}
 
@@ -77,14 +99,7 @@ func (p *MetricsPipeline) Handle(_ context.Context, payload models.EnrichedPaylo
 			continue
 		}
 
-		if err := p.eventsBatcher.Add(writer.EventRow{
-			SessionID:   payload.SessionID,
-			UserID:      payload.UserID,
-			URL:         payload.URL,
-			EventName:   eventName,
-			MetricValue: 1,
-			Timestamp:   writer.MsToTime(interaction.Timestamp),
-		}); err != nil {
+		if err := p.eventsBatcher.Add(eventRowFromPayload(payload, eventName, 1, interaction.Timestamp)); err != nil {
 			return err
 		}
 	}

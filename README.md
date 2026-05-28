@@ -23,8 +23,8 @@ Browser (SDK on demo store)
 
 ### Data flow
 
-1. The SDK batches rrweb events, interactions, and telemetry and POSTs to `/v1/events`.
-2. The ingest API validates payloads, masks sensitive fields, and publishes to Kafka.
+1. The SDK batches rrweb events, interactions, and telemetry and POSTs to `/v1/events`. It sends a persistent `visitorId` (localStorage), `sessionId` (sessionStorage), `referrer`, and optional `userId`.
+2. The ingest API validates payloads, resolves country (optional GeoLite2), parses browser/OS from User-Agent, masks sensitive fields, and publishes to Kafka.
 3. Workers consume the same topic in parallel:
    - **Metadata** upserts one Postgres row per `sessionId` (updates `updated_at` on later batches).
    - **Metrics** writes ClickHouse rows for analytics charts and frustration detection.
@@ -56,7 +56,8 @@ docker compose up --build
 
 | URL | Service |
 |-----|---------|
-| http://localhost:3000 | Dashboard |
+| http://localhost:3000 | Dashboard (sessions and replay) |
+| http://localhost:3000/analytics | Web analytics (visitors, geo, browsers) |
 | http://localhost:3001 | Demo store (Next.js, multi-page) |
 | http://localhost:8080 | Ingest API |
 | http://localhost:9333 | SeaweedFS admin |
@@ -67,7 +68,25 @@ docker compose up --build
 2. On Home, try rapid clicks on the red “Broken checkout button” to generate rage-click events.
 3. Wait about 30 seconds for workers to flush replay blobs.
 4. Open http://localhost:3000, click **Refresh** on the session list, then **Watch** on your session.
-5. Use **Clear all sessions** on the dashboard to wipe Postgres, ClickHouse, and stored replays before another test run.
+5. Open **Analytics** in the nav (or http://localhost:3000/analytics) to see pageviews, unique visitors, world map, and browser/OS breakdowns.
+6. Use **Clear all sessions** on the dashboard to wipe Postgres, ClickHouse, and stored replays before another test run.
+
+### GeoIP (optional)
+
+Country codes are resolved at ingest from the client IP using MaxMind GeoLite2:
+
+1. Create a free MaxMind account and download `GeoLite2-Country.mmdb`.
+2. Place it at `infra/geoip/GeoLite2-Country.mmdb` (this path is gitignored).
+3. Restart the ingest API container. Without the file, `country` is stored as `Unknown` (or `LOCAL` for private IPs).
+
+Existing Docker volumes need schema migrations:
+
+```bash
+docker compose exec clickhouse clickhouse-client --user default --password password --multiquery < infra/clickhouse/migrate_analytics.sql
+docker compose exec postgres psql -U sighthog_user -d sighthog_metadata -f - < infra/postgres/migrate_analytics.sql
+```
+
+(Adjust paths if running from the host; pipe the SQL files into the containers.)
 
 ## Project layout
 
@@ -136,6 +155,7 @@ Copy `.env.example` to `.env` before `docker compose up`. Important variables:
 - `SEAWEEDFS_ENDPOINT` / `SEAWEEDFS_BUCKET` — replay object storage
 - `CORS_ALLOWED_ORIGINS` — must include demo and dashboard origins
 - `NEXT_PUBLIC_DEMO_URL` — link from dashboard to the demo store
+- `GEOLITE2_DB_PATH` — path to GeoLite2-Country.mmdb inside the ingest container (default `/geo/GeoLite2-Country.mmdb`)
 
 ## Verification commands
 
