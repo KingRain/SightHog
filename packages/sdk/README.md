@@ -2,8 +2,6 @@
 
 The official browser telemetry and session replay SDK for **SightHog**.
 
-> **Publishing:** See [PUBLISHING.md](./PUBLISHING.md). Package name on npm: `@httperror/sighthog`.
-
 SightHog captures pixel-accurate DOM replay (via `rrweb`), user interactions (clicks, scrolls, custom events), browser logs (console logs, unhandled exceptions), network performance, and Core Web Vitals to deliver a complete dashboard for session playback and product analytics.
 
 ---

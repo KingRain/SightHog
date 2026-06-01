@@ -1,6 +1,6 @@
 {
   "name": "@httperror/sighthog",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SightHog browser telemetry SDK with rrweb",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -45,5 +45,5 @@
   "bugs": {
     "url": "https://github.com/kingrain/sighthog/issues"
   },
-  "homepage": "https://sighthog.vercel.app"
+  "homepage": "https://sight-hog.vercel.app"
 }
