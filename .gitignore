@@ -12,4 +12,7 @@ apps/demo/dist/
 apps/demo/.next/
 apps/dashboard/.next/
 apps/dashboard/node_modules/
+# MaxMind GeoLite2 (download locally; do not commit)
 infra/geoip/*.mmdb
+GeoLite2-Country.mmdb
+*.mmdb

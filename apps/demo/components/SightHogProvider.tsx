@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
-import { initSightHog } from "@sighthog/sdk";
+import { useEffect, useLayoutEffect } from "react";
+import { usePathname } from "next/navigation";
+import { captureFullSnapshot, initSightHog } from "@sighthog/sdk";
 
 export default function SightHogProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  useEffect(() => {
+  const pathname = usePathname();
+
+  useLayoutEffect(() => {
     const endpoint =
       process.env.NEXT_PUBLIC_SDK_ENDPOINT ?? "http://localhost:8080/v1/events";
 
@@ -19,6 +22,10 @@ export default function SightHogProvider({
       maskSelectors: ["[data-sensitive]", "input[type='password']"],
     });
   }, []);
+
+  useEffect(() => {
+    captureFullSnapshot();
+  }, [pathname]);
 
   return <>{children}</>;
 }

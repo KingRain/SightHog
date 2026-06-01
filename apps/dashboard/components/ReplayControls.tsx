@@ -44,13 +44,7 @@ export default function ReplayControls({
 
   const handlePlayPause = () => {
     if (!controller) return;
-    if (isPlaying) {
-      controller.pause();
-      onPlayStateChange(false);
-    } else {
-      controller.play();
-      onPlayStateChange(true);
-    }
+    controller.toggle();
   };
 
   const handleRestart = () => {

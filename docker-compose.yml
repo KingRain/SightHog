@@ -115,6 +115,7 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_TOPIC=sighthog-raw-events
       - INGEST_API_PORT=8080
+      - MAX_BODY_BYTES=10485760
       - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
       - GEOLITE2_DB_PATH=/geo/GeoLite2-Country.mmdb
     volumes:

@@ -18,7 +18,7 @@ export default function AddToCartButton({
   return (
     <button
       type="button"
-      className="btn btn-primary"
+      className="inline-flex h-11 items-center rounded-xl bg-accent px-5 text-sm font-semibold text-accent-foreground transition hover:opacity-90"
       onClick={() => {
         trackFunnelAddCart();
         addToCart({ slug, name, price });

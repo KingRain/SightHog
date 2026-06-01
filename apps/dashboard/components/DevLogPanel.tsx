@@ -27,7 +27,6 @@ type DevToolsTab =
   | "errors"
   | "actions";
 
-const ACTIVE_LOG_THRESHOLD_MS = 1200;
 const SLOW_LCP_MS = 2500;
 
 interface DevLogPanelProps {
@@ -100,6 +99,21 @@ export default function DevLogPanel({
     }
   }, [tab, timeFilteredLogs]);
 
+  const activeLogIndex = useMemo(() => {
+    if (visibleLogs.length === 0) return -1;
+    let best = 0;
+    let bestDelta = Infinity;
+    for (let i = 0; i < visibleLogs.length; i++) {
+      const relative = visibleLogs[i].timestamp - sessionStartTimeMs;
+      const delta = currentVideoTimeMs - relative;
+      if (delta >= 0 && delta < bestDelta) {
+        bestDelta = delta;
+        best = i;
+      }
+    }
+    return best;
+  }, [visibleLogs, sessionStartTimeMs, currentVideoTimeMs]);
+
   useEffect(() => {
     if (!autoScroll || userScrolledRef.current) return;
     if (!activeRowRef.current || !containerRef.current) return;
@@ -116,7 +130,7 @@ export default function DevLogPanel({
     } else if (rowBottom > viewBottom) {
       container.scrollTop = rowBottom - container.clientHeight;
     }
-  }, [currentVideoTimeMs, autoScroll, visibleLogs.length]);
+  }, [currentVideoTimeMs, autoScroll, visibleLogs.length, activeLogIndex]);
 
   const handleContainerScroll = () => {
     const container = containerRef.current;
@@ -149,23 +163,24 @@ export default function DevLogPanel({
     { key: "errors", label: "Errors", icon: AlertTriangle },
     { key: "console", label: "Console", icon: Terminal },
     { key: "network", label: "Network", icon: Network },
-    { key: "performance", label: "Performance", icon: Gauge },
+    { key: "performance", label: "Perf", icon: Gauge },
     { key: "actions", label: "Actions", icon: MousePointerClick },
   ];
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border bg-card font-mono text-xs">
-      <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <Wrench className="size-4 text-primary" aria-hidden />
-          <span className="font-sans font-semibold text-foreground text-sm">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border bg-card font-sans text-xs shadow-sm">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/80 bg-muted/30 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Wrench className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="font-semibold text-foreground text-sm">
             DevTools
           </span>
-          <span className="font-sans text-muted-foreground text-[10px]">
+          <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
             @ {(currentVideoTimeMs / 1000).toFixed(1)}s
           </span>
         </div>
-        <label className="flex items-center gap-1.5 font-sans text-[10px] text-muted-foreground">
+        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[10px] text-muted-foreground">
           <input
             type="checkbox"
             checked={autoScroll}
@@ -175,71 +190,90 @@ export default function DevLogPanel({
             }}
             className="size-3 rounded border-input"
           />
-          Follow playhead
+          Follow
         </label>
       </div>
 
-      {(tab === "performance" || tab === "all") && Object.keys(vitalsSummary).length > 0 && (
-        <div className="grid grid-cols-2 gap-1.5 border-b bg-muted/15 p-2 sm:grid-cols-4">
-          {Object.entries(vitalsSummary).map(([name, data]) => {
-            const slow = name === "LCP" && data.value > SLOW_LCP_MS;
+      {/* Web Vitals summary */}
+      {(tab === "performance" || tab === "all") &&
+        Object.keys(vitalsSummary).length > 0 && (
+          <div className="grid shrink-0 grid-cols-2 gap-1.5 border-b border-border/60 bg-muted/10 p-2 sm:grid-cols-4">
+            {Object.entries(vitalsSummary).map(([name, data]) => {
+              const slow = name === "LCP" && data.value > SLOW_LCP_MS;
+              return (
+                <div
+                  key={name}
+                  className={cn(
+                    "rounded-md border px-2 py-1.5",
+                    slow
+                      ? "border-amber-500/40 bg-amber-500/10"
+                      : "border-border/60 bg-background"
+                  )}
+                >
+                  <p className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                    {name}
+                  </p>
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {name === "CLS"
+                      ? data.value.toFixed(3)
+                      : `${Math.round(data.value)}ms`}
+                  </p>
+                  {data.rating && (
+                    <p className="text-[9px] capitalize text-muted-foreground">
+                      {data.rating}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      {/* Tabs */}
+      <div className="shrink-0 border-b border-border/60 px-2 py-2">
+        <div className="flex flex-wrap gap-1">
+          {tabs.map(({ key, label, icon: Icon }) => {
+            const active = tab === key;
             return (
-              <div
-                key={name}
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
                 className={cn(
-                  "rounded-md border px-2 py-1.5",
-                  slow ? "border-amber-500/40 bg-amber-500/10" : "bg-background"
+                  "inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] transition",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <p className="font-sans text-[9px] text-muted-foreground uppercase">
-                  {name}
-                </p>
-                <p className="font-semibold tabular-nums text-foreground">
-                  {name === "CLS"
-                    ? data.value.toFixed(3)
-                    : `${Math.round(data.value)}ms`}
-                </p>
-                {data.rating && (
-                  <p className="text-[9px] text-muted-foreground">{data.rating}</p>
-                )}
-              </div>
+                {Icon && <Icon className="size-3" />}
+                <span>{label}</span>
+                <span
+                  className={cn(
+                    "ml-0.5 rounded px-1 text-[10px] tabular-nums",
+                    active
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {tabCounts[key]}
+                </span>
+              </button>
             );
           })}
         </div>
-      )}
-
-      <div className="border-b px-2 py-2">
-        <div className="flex flex-wrap gap-1">
-          {tabs.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] transition",
-                tab === key
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              {Icon && <Icon className="size-3" />}
-              {label}
-              <span className="opacity-70">{tabCounts[key]}</span>
-            </button>
-          ))}
-        </div>
       </div>
 
+      {/* Log entries */}
       <div
         ref={containerRef}
         onScroll={handleContainerScroll}
-        className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2"
+        className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2"
       >
         {visibleLogs.map((log, index) => {
           const rowKey = `${log.timestamp}-${log.type}-${index}`;
           const relativeMs = log.timestamp - sessionStartTimeMs;
-          const isActive =
-            Math.abs(relativeMs - currentVideoTimeMs) <= ACTIVE_LOG_THRESHOLD_MS;
+          const isActive = index === activeLogIndex;
           const expanded = expandedKey === rowKey;
           const styling = getLogRowStyle(log);
           const technicalLine = formatTechnicalSummary(log);
@@ -247,6 +281,7 @@ export default function DevLogPanel({
             log.type === "network"
               ? String(log.metadata.url ?? log.message)
               : log.message;
+          const canCopy = log.type === "network" && Boolean(copyPayload);
 
           return (
             <div
@@ -255,33 +290,34 @@ export default function DevLogPanel({
               className={cn(
                 "overflow-hidden rounded-md border transition",
                 styling.container,
-                isActive && "border-primary/50 bg-primary/8 ring-1 ring-primary/30"
+                isActive &&
+                  "border-primary/50 bg-primary/[0.06] ring-1 ring-primary/30"
               )}
             >
-              <div className="flex items-start gap-1 p-1">
+              <div className="flex items-stretch">
                 <button
                   type="button"
-                  className="flex min-w-0 flex-1 items-start gap-2 p-1 text-left"
+                  className="grid min-w-0 flex-1 grid-cols-[1rem_3.25rem_2.25rem_1rem_1fr] items-start gap-1.5 px-2 py-1.5 text-left"
                   onClick={() => {
                     setExpandedKey(expanded ? null : rowKey);
                     onSeek?.(relativeMs);
                   }}
                 >
-                  <span className="mt-0.5 shrink-0 text-muted-foreground">
+                  <span className="mt-0.5 text-muted-foreground">
                     {expanded ? (
                       <ChevronDown className="size-3" />
                     ) : (
                       <ChevronRight className="size-3" />
                     )}
                   </span>
-                  <span className="w-[3.25rem] shrink-0 text-right text-[10px] text-muted-foreground tabular-nums">
+                  <span className="mt-0.5 text-right text-[10px] tabular-nums text-muted-foreground">
                     +{(relativeMs / 1000).toFixed(2)}s
                   </span>
-                  <span className="w-9 shrink-0 font-bold text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                     {channelLabel(log)}
                   </span>
-                  <span className="mt-0.5 shrink-0">{renderIcon(log)}</span>
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                  <span className="mt-0.5">{renderIcon(log)}</span>
+                  <div className="min-w-0 space-y-0.5">
                     <div className="flex flex-wrap items-center gap-1">
                       {log.level && (
                         <span
@@ -297,21 +333,30 @@ export default function DevLogPanel({
                         {log.subType}
                       </span>
                     </div>
-                    <p className={cn("break-all leading-snug", styling.text)}>
+                    <p
+                      className={cn(
+                        "truncate font-mono leading-snug",
+                        styling.text
+                      )}
+                      title={log.message}
+                    >
                       {log.message}
                     </p>
                     {technicalLine && (
-                      <p className="break-all text-[10px] text-muted-foreground leading-relaxed">
+                      <p
+                        className="truncate font-mono text-[10px] leading-relaxed text-muted-foreground"
+                        title={technicalLine}
+                      >
                         {technicalLine}
                       </p>
                     )}
                   </div>
                 </button>
-                {log.type === "network" && copyPayload && (
+                {canCopy && (
                   <button
                     type="button"
                     title="Copy URL"
-                    className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted"
+                    className="flex w-8 shrink-0 items-center justify-center border-l border-border/40 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                     onClick={() => void copyText(copyPayload, rowKey)}
                   >
                     <Copy className="size-3" />
@@ -319,13 +364,13 @@ export default function DevLogPanel({
                 )}
               </div>
               {copiedKey === rowKey && (
-                <p className="px-3 pb-1 font-sans text-[9px] text-emerald-600">
-                  Copied
+                <p className="border-t border-border/40 bg-emerald-500/10 px-3 py-1 text-[9px] text-emerald-600 dark:text-emerald-400">
+                  Copied to clipboard
                 </p>
               )}
               {expanded && (
-                <div className="border-t bg-muted/20 px-3 py-2">
-                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all text-[10px] leading-relaxed text-muted-foreground">
+                <div className="border-t border-border/40 bg-muted/20 px-3 py-2">
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-muted-foreground">
                     {formatInspectionBlock(log)}
                   </pre>
                 </div>
@@ -335,7 +380,7 @@ export default function DevLogPanel({
         })}
 
         {visibleLogs.length === 0 && (
-          <div className="py-16 text-center font-sans text-muted-foreground text-sm">
+          <div className="py-16 text-center text-sm text-muted-foreground">
             {logs.length === 0
               ? "No telemetry for this session."
               : `No ${tab === "all" ? "" : tab} events before playhead.`}
@@ -343,8 +388,14 @@ export default function DevLogPanel({
         )}
       </div>
 
-      <div className="border-t px-3 py-1.5 font-sans text-[10px] text-muted-foreground">
-        {visibleLogs.length} / {logs.length} entries
+      {/* Footer */}
+      <div className="flex shrink-0 items-center justify-between border-t border-border/60 px-3 py-1.5 text-[10px] tabular-nums text-muted-foreground">
+        <span>{visibleLogs.length} of {logs.length} entries</span>
+        {activeLogIndex >= 0 && visibleLogs.length > 0 && (
+          <span className="opacity-70">
+            row {activeLogIndex + 1} / {visibleLogs.length}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -410,24 +461,32 @@ function formatTechnicalSummary(log: LogItem): string | null {
 }
 
 function getLogRowStyle(log: LogItem) {
-  if (isErrorLog(log) || log.subType === "rage_click" || log.subType === "error_click") {
+  if (
+    isErrorLog(log) ||
+    log.subType === "rage_click" ||
+    log.subType === "error_click"
+  ) {
     return {
       container: "border-destructive/35 bg-destructive/5",
       badge: "bg-destructive/20 text-destructive",
       text: "text-destructive",
     };
   }
-  if (log.level === "warn" || isSlowNetwork(log) || log.subType === "dead_click") {
+  if (
+    log.level === "warn" ||
+    isSlowNetwork(log) ||
+    log.subType === "dead_click"
+  ) {
     return {
-      container: "border-amber-500/35 bg-amber-500/5",
-      badge: "bg-amber-500/20 text-amber-700",
+      container: "border-amber-500/40 bg-amber-500/5",
+      badge: "bg-amber-500/20 text-amber-700 dark:text-amber-400",
       text: "text-foreground",
     };
   }
   if (log.type === "action") {
     return {
-      container: "border-sky-500/30 bg-sky-500/5",
-      badge: "bg-sky-500/15 text-sky-700",
+      container: "border-sky-500/35 bg-sky-500/5",
+      badge: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
       text: "text-foreground",
     };
   }

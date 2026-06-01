@@ -2,14 +2,13 @@
 
 import { useCallback, useRef, useState } from "react";
 import {
-  ChevronDown,
-  Gauge,
   Keyboard,
-  Maximize2,
+  MousePointer2,
   Pause,
   Play,
+  Rewind,
   RotateCcw,
-  Terminal,
+  FastForward,
 } from "lucide-react";
 import type { InactivitySegment } from "@/lib/inactivity-segments";
 import {
@@ -18,24 +17,25 @@ import {
   type TimelineMarker,
 } from "@/lib/session-markers";
 import type { SessionPage } from "@/lib/session-pages";
-import type { ReplayController } from "@/components/ReplayControls";
+import { useAppDispatch, useAppSelector } from "@/store";
+import {
+  setCurrentTimeMs,
+  setHeatmapEnabled,
+  setIsPlaying,
+  setSpeed,
+} from "@/store/replaySlice";
 import { cn } from "@/lib/utils";
+import { Kbd } from "@/components/unlumen/kbd";
 
 const SPEED_OPTIONS = [0.5, 1, 2, 4] as const;
 
 interface SessionTimelineBarProps {
-  controller: ReplayController | null;
-  isPlaying: boolean;
-  currentSpeed: number;
-  currentTimeMs: number;
   totalDurationMs: number;
   sessionStartTimeMs: number;
   markers: TimelineMarker[];
   pages: SessionPage[];
   inactivitySegments: InactivitySegment[];
   onSeek: (timeMs: number) => void;
-  onPlayStateChange: (playing: boolean) => void;
-  onSpeedChange: (speed: number) => void;
 }
 
 function formatClock(ms: number): string {
@@ -46,26 +46,29 @@ function formatClock(ms: number): string {
 }
 
 export default function SessionTimelineBar({
-  controller,
-  isPlaying,
-  currentSpeed,
-  currentTimeMs,
   totalDurationMs,
   sessionStartTimeMs,
   markers,
   pages,
   inactivitySegments,
   onSeek,
-  onPlayStateChange,
-  onSpeedChange,
 }: SessionTimelineBarProps) {
+  const dispatch = useAppDispatch();
+  const controller = useAppSelector((s) => s.replay.controller);
+  const isPlaying = useAppSelector((s) => s.replay.isPlaying);
+  const currentSpeed = useAppSelector((s) => s.replay.speed);
+  const currentTimeMs = useAppSelector((s) => s.replay.currentTimeMs);
+  const heatmapEnabled = useAppSelector((s) => s.replay.heatmapEnabled);
+  const heatmapLoading = useAppSelector((s) => s.replay.heatmapLoading);
+
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [hoverPercent, setHoverPercent] = useState<number | null>(null);
   const disabled = !controller;
 
   const progressPercent =
     totalDurationMs > 0
-      ? Math.min(100, (currentTimeMs / totalDurationMs) * 100)
+      ? Math.min(100, Math.max(0, (currentTimeMs / totalDurationMs) * 100))
       : 0;
 
   const seekFromClientX = useCallback(
@@ -73,30 +76,48 @@ export default function SessionTimelineBar({
       const track = trackRef.current;
       if (!track || totalDurationMs <= 0) return;
       const rect = track.getBoundingClientRect();
-      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      const ratio = Math.min(
+        1,
+        Math.max(0, (clientX - rect.left) / rect.width),
+      );
       onSeek(ratio * totalDurationMs);
     },
-    [onSeek, totalDurationMs]
+    [onSeek, totalDurationMs],
   );
 
+  const hoverFromClientX = useCallback((clientX: number) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(
+      1,
+      Math.max(0, (clientX - rect.left) / rect.width),
+    );
+    setHoverPercent(ratio * 100);
+  }, []);
+
   const seekRelative = (deltaMs: number) => {
-    onSeek(Math.min(totalDurationMs, Math.max(0, currentTimeMs + deltaMs)));
+    onSeek(
+      Math.min(totalDurationMs, Math.max(0, currentTimeMs + deltaMs)),
+    );
   };
 
   const handlePlayPause = () => {
     if (!controller) return;
-    if (isPlaying) {
-      controller.pause();
-      onPlayStateChange(false);
-    } else {
-      controller.play();
-      onPlayStateChange(true);
-    }
+    controller.toggle();
+  };
+
+  const handleRestart = () => {
+    onSeek(0);
+    controller?.goto(0);
+    controller?.pause();
+    dispatch(setCurrentTimeMs(0));
+    dispatch(setIsPlaying(false));
   };
 
   return (
-    <div className="session-timeline-bar rounded-xl border bg-card px-4 py-3 shadow-sm">
-      <div className="relative mb-3 pt-2">
+    <div className="session-timeline-bar flex w-full flex-col gap-3">
+      <div className="px-2 pt-3 pb-1">
         <div
           ref={trackRef}
           role="slider"
@@ -104,9 +125,11 @@ export default function SessionTimelineBar({
           aria-valuemin={0}
           aria-valuemax={totalDurationMs}
           aria-valuenow={currentTimeMs}
+          tabIndex={0}
           className={cn(
-            "session-timeline-rail relative mx-1 h-2 cursor-pointer rounded-full bg-muted",
-            dragging && "ring-2 ring-primary/30"
+            "session-timeline-rail group relative h-2.5 w-full cursor-pointer rounded-full bg-muted transition-[height,box-shadow]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            (dragging || hoverPercent !== null) && "h-3 ring-2 ring-primary/20",
           )}
           onPointerDown={(e) => {
             if (e.button !== 0) return;
@@ -114,7 +137,11 @@ export default function SessionTimelineBar({
             setDragging(true);
             seekFromClientX(e.clientX);
           }}
-          onPointerMove={(e) => dragging && seekFromClientX(e.clientX)}
+          onPointerMove={(e) => {
+            hoverFromClientX(e.clientX);
+            if (dragging) seekFromClientX(e.clientX);
+          }}
+          onPointerLeave={() => setHoverPercent(null)}
           onPointerUp={(e) => {
             if (dragging) {
               setDragging(false);
@@ -122,10 +149,11 @@ export default function SessionTimelineBar({
             }
           }}
         >
+          {/* Inactive segments (hatched) */}
           {inactivitySegments.map((seg, i) => (
             <span
               key={`inactive-${i}`}
-              className="session-timeline-inactive absolute inset-y-0 rounded-full"
+              className="session-timeline-inactive pointer-events-none absolute inset-y-0 rounded-full"
               style={{
                 left: `${seg.startPercent}%`,
                 width: `${seg.endPercent - seg.startPercent}%`,
@@ -133,156 +161,215 @@ export default function SessionTimelineBar({
             />
           ))}
 
-          {pages.slice(1).map((page) => (
-            <span
-              key={page.id}
-              className="pointer-events-none absolute top-0 bottom-0 w-px bg-border/80"
-              style={{
-                left: `${(page.startTimeMs / totalDurationMs) * 100}%`,
-              }}
-            />
-          ))}
+          {/* Page boundary dividers */}
+          {totalDurationMs > 0 &&
+            pages.slice(1).map((page) => (
+              <span
+                key={page.id}
+                className="pointer-events-none absolute inset-y-0 w-px bg-border"
+                style={{
+                  left: `${(page.startTimeMs / totalDurationMs) * 100}%`,
+                }}
+              />
+            ))}
 
+          {/* Filled progress */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-primary/85"
+            className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary/80 to-primary"
             style={{ width: `${progressPercent}%` }}
           />
 
+          {/* Hover preview line */}
+          {hoverPercent !== null && !dragging && (
+            <span
+              className="pointer-events-none absolute inset-y-0 w-px bg-foreground/40"
+              style={{ left: `${hoverPercent}%` }}
+            />
+          )}
+
+          {/* Event tick markers */}
           {markers.map((marker, index) => {
             const left = markerPercent(
               marker.timestamp,
               sessionStartTimeMs,
-              totalDurationMs
+              totalDurationMs,
             );
             return (
               <span
                 key={`tick-${marker.timestamp}-${index}`}
-                className="session-timeline-event-tick pointer-events-none absolute bottom-full mb-0.5 w-0.5 rounded-full"
+                className="session-timeline-event-tick pointer-events-none absolute top-1/2 rounded-full"
                 style={{
                   left: `${left}%`,
-                  height: marker.kind === "error" ? "14px" : "10px",
+                  width: "2px",
+                  height: marker.kind === "error" ? "14px" : "9px",
                   backgroundColor: TIMELINE_MARKER_COLORS[marker.kind],
+                  transform: "translate(-50%, -50%)",
                 }}
+                title={marker.label}
               />
             );
           })}
-        </div>
 
-        <div
-          className="session-timeline-playhead-knob pointer-events-none absolute top-0 size-3.5 -translate-x-1/2 rounded-full border-2 border-primary bg-background shadow-md"
-          style={{ left: `calc(${progressPercent}% + 4px)` }}
-        />
+          {/* Playhead knob */}
+          <div
+            className={cn(
+              "session-timeline-playhead-knob pointer-events-none absolute top-1/2 z-10 size-4 rounded-full border-2 border-primary bg-background shadow-md",
+              dragging && "scale-110",
+            )}
+            style={{
+              left: `${progressPercent}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <div className="flex items-center gap-1 rounded-lg border bg-background p-1 shadow-sm">
+          <ControlIconButton
+            onClick={handleRestart}
+            disabled={disabled}
+            label="Restart"
+          >
+            <RotateCcw className="size-3.5" />
+          </ControlIconButton>
+          <ControlIconButton
+            onClick={() => seekRelative(-10_000)}
+            disabled={disabled}
+            label="Back 10 seconds"
+          >
+            <Rewind className="size-3.5" />
+          </ControlIconButton>
           <button
             type="button"
             disabled={disabled}
             aria-label={isPlaying ? "Pause" : "Play"}
+            title={isPlaying ? "Pause" : "Play"}
             onClick={handlePlayPause}
-            className="inline-flex size-9 items-center justify-center rounded-full border bg-background shadow-sm transition hover:bg-muted disabled:opacity-40"
+            className={cn(
+              "inline-flex size-9 items-center justify-center rounded-md text-primary-foreground transition",
+              "bg-primary hover:bg-primary/90",
+              "disabled:cursor-not-allowed disabled:opacity-40",
+            )}
           >
             {isPlaying ? (
-              <Pause className="size-4 text-foreground" />
+              <Pause className="size-4" />
             ) : (
-              <Play className="size-4 text-foreground" />
+              <Play className="size-4 translate-x-px" />
             )}
           </button>
-
-          <div className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1.5 text-xs tabular-nums shadow-sm">
-            <span className="font-medium text-foreground">
-              {formatClock(currentTimeMs)}
-            </span>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-muted-foreground">
-              {formatClock(totalDurationMs)}
-            </span>
-            <ChevronDown className="size-3 text-muted-foreground" />
-          </div>
-
-          <button
-            type="button"
-            disabled={disabled}
-            className="rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium shadow-sm hover:bg-muted disabled:opacity-40"
-            onClick={() => seekRelative(-10_000)}
-          >
-            −10s
-          </button>
-          <button
-            type="button"
-            disabled={disabled}
-            className="rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium shadow-sm hover:bg-muted disabled:opacity-40"
+          <ControlIconButton
             onClick={() => seekRelative(10_000)}
+            disabled={disabled}
+            label="Forward 10 seconds"
           >
-            +10s
-          </button>
-
-          <div className="inline-flex overflow-hidden rounded-md border bg-background shadow-sm">
-            {SPEED_OPTIONS.map((speed) => (
-              <button
-                key={speed}
-                type="button"
-                disabled={disabled}
-                className={cn(
-                  "px-2.5 py-1.5 text-xs font-semibold tabular-nums transition",
-                  currentSpeed === speed
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted"
-                )}
-                onClick={() => {
-                  controller?.setSpeed(speed);
-                  onSpeedChange(speed);
-                }}
-              >
-                {speed}x
-              </button>
-            ))}
-          </div>
+            <FastForward className="size-3.5" />
+          </ControlIconButton>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <ToolIcon label="Restart" onClick={() => controller?.goto(0)}>
-            <RotateCcw className="size-3.5" />
-          </ToolIcon>
-          <ToolIcon label="Console logs">
-            <Terminal className="size-3.5" />
-          </ToolIcon>
-          <ToolIcon label="Performance">
-            <Gauge className="size-3.5" />
-          </ToolIcon>
-          <ToolIcon label="Fullscreen">
-            <Maximize2 className="size-3.5" />
-          </ToolIcon>
+        <div className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-background px-3 text-xs tabular-nums shadow-sm">
+          <span className="font-semibold text-foreground">
+            {formatClock(currentTimeMs)}
+          </span>
+          <span className="text-border">/</span>
+          <span className="text-muted-foreground">
+            {formatClock(totalDurationMs)}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          disabled={disabled || heatmapLoading}
+          aria-pressed={heatmapEnabled}
+          aria-label={
+            heatmapEnabled ? "Hide click heatmap" : "Show click heatmap"
+          }
+          title={heatmapEnabled ? "Hide heatmap" : "Show heatmap"}
+          onClick={() => dispatch(setHeatmapEnabled(!heatmapEnabled))}
+          className={cn(
+            "inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40",
+            heatmapEnabled
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-background text-foreground hover:bg-muted",
+          )}
+        >
+          <MousePointer2 className="size-3.5" />
+          Heatmap
+        </button>
+
+        <div
+          role="group"
+          aria-label="Playback speed"
+          className="inline-flex h-9 items-stretch overflow-hidden rounded-lg border bg-background shadow-sm"
+        >
+          {SPEED_OPTIONS.map((speed) => (
+            <button
+              key={speed}
+              type="button"
+              disabled={disabled}
+              aria-pressed={currentSpeed === speed}
+              className={cn(
+                "min-w-[2.5rem] px-2.5 text-xs font-semibold tabular-nums transition",
+                "disabled:cursor-not-allowed disabled:opacity-40",
+                currentSpeed === speed
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              onClick={() => {
+                controller?.setSpeed(speed);
+                dispatch(setSpeed(speed));
+              }}
+            >
+              {speed}x
+            </button>
+          ))}
+        </div>
+
+        <div className="ml-auto hidden items-center gap-2 text-[11px] text-muted-foreground sm:flex">
+          <Keyboard className="size-3.5" aria-hidden />
+          <span className="inline-flex items-center gap-1">
+            <Kbd size="sm">Space</Kbd>
+            <span className="opacity-60">play</span>
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd size="sm">←</Kbd>
+            <Kbd size="sm">→</Kbd>
+            <span className="opacity-60">seek</span>
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd size="sm">,</Kbd>
+            <Kbd size="sm">.</Kbd>
+            <span className="opacity-60">speed</span>
+          </span>
         </div>
       </div>
-
-      <p className="flex items-center justify-center gap-1.5 border-t px-3 py-1.5 font-sans text-[10px] text-muted-foreground">
-        <Keyboard className="size-3 shrink-0" aria-hidden />
-        <span>
-          Space play/pause · ←/→ seek · Home/End · ,/. speed
-        </span>
-      </p>
     </div>
   );
 }
 
-function ToolIcon({
+function ControlIconButton({
   children,
-  label,
   onClick,
+  disabled,
+  label,
 }: {
   children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
   label: string;
-  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
-      title={label}
       aria-label={label}
+      title={label}
+      disabled={disabled}
       onClick={onClick}
-      className="inline-flex size-8 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
+      className={cn(
+        "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition",
+        "hover:bg-muted hover:text-foreground",
+        "disabled:cursor-not-allowed disabled:opacity-40",
+      )}
     >
       {children}
     </button>

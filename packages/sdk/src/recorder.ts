@@ -1,4 +1,4 @@
-import { record } from "rrweb";
+import type { record as rrwebRecord } from "rrweb";
 import { Batcher } from "./batcher";
 import { createFrustrationTracker } from "./frustration";
 import {
@@ -52,6 +52,7 @@ export interface RecorderHandle {
   batcher: Batcher;
   flush: (useBeacon?: boolean) => void;
   stop: (useBeacon?: boolean) => void;
+  captureFullSnapshot: () => void;
 }
 
 export function startRecorder(options: RecorderOptions): RecorderHandle {
@@ -77,12 +78,31 @@ export function startRecorder(options: RecorderOptions): RecorderHandle {
 
   const privacyOpts = getPrivacyRecordOptions(options.maskAllInputs ?? false);
 
-  const stopRecord = record({
-    emit(event) {
-      batcher.addEvent(event);
-    },
-    ...privacyOpts,
-  });
+  let activeRecord: typeof rrwebRecord | undefined;
+  let stopRecord: (() => void) | undefined;
+
+  import("rrweb")
+    .then((rrweb) => {
+      activeRecord = rrweb.record;
+      stopRecord = rrweb.record({
+        emit(event) {
+          batcher.addEvent(event);
+        },
+        checkoutEveryNms: 60_000,
+        ...privacyOpts,
+      });
+    })
+    .catch((err) => {
+      console.error("[SightHog] Failed to dynamically load rrweb:", err);
+    });
+
+  const captureFullSnapshot = () => {
+    if (activeRecord) {
+      activeRecord.takeFullSnapshot(true);
+    } else {
+      console.warn("[SightHog] Cannot capture full snapshot: rrweb not loaded yet");
+    }
+  };
 
   const onClick = (event: MouseEvent) => {
     scheduleIdle(() => {
@@ -120,6 +140,7 @@ export function startRecorder(options: RecorderOptions): RecorderHandle {
     flush(useBeacon = false) {
       batcher.flush(useBeacon);
     },
+    captureFullSnapshot,
     stop(useBeacon = false) {
       window.removeEventListener("click", onClick, true);
       window.removeEventListener("scroll", onScroll);
@@ -131,3 +152,4 @@ export function startRecorder(options: RecorderOptions): RecorderHandle {
     },
   };
 }
+

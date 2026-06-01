@@ -83,8 +83,13 @@ func (w *BlobWriter) FlushAll(ctx context.Context) error {
 		if len(events) == 0 {
 			continue
 		}
-		if err := w.uploadSession(ctx, sessionID, events); err != nil && firstErr == nil {
-			firstErr = err
+		if err := w.uploadSession(ctx, sessionID, events); err != nil {
+			w.mu.Lock()
+			w.sessions[sessionID] = append(w.sessions[sessionID], events...)
+			w.mu.Unlock()
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 	return firstErr

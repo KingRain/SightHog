@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, List, MessageSquare, Share2, User } from "lucide-react";
+import { Globe, User, type LucideIcon } from "lucide-react";
 import { parseUserAgent } from "@/lib/parse-user-agent";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,13 @@ function displayName(meta: SessionMeta): string {
   return "Anonymous visitor";
 }
 
+interface MetaItem {
+  icon?: LucideIcon;
+  label: string;
+  key: string;
+  className?: string;
+}
+
 export default function SessionClientHeader({
   meta,
   className,
@@ -56,60 +63,67 @@ export default function SessionClientHeader({
         ? meta.client_ip
         : "Local / unknown";
 
+  const metaItems: MetaItem[] = [
+    { key: "time", label: formatSessionTime(meta.created_at) },
+    { key: "location", label: location, icon: Globe },
+    { key: "browser", label: browser },
+    { key: "os", label: os },
+  ];
+
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3 shadow-sm",
+        "flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2",
         className
       )}
     >
-      <div className="flex items-center gap-3">
-        <div className="flex size-11 items-center justify-center rounded-full bg-primary/15 text-primary shadow-sm">
-          <User className="size-5" />
-        </div>
-        <div>
-          <p className="font-semibold text-foreground text-sm">
-            {displayName(meta)}
-          </p>
-          <p className="mt-0.5 text-muted-foreground text-xs">
-            {formatSessionTime(meta.created_at)}
-            <span className="mx-1.5 text-border">•</span>
-            <span className="inline-flex items-center gap-0.5">
-              <Globe className="size-3" aria-hidden />
-              {location}
-            </span>
-            <span className="mx-1.5 text-border">•</span>
-            {browser}
-            <span className="mx-1.5 text-border">•</span>
-            {os}
-          </p>
-        </div>
+      <div
+        className="flex size-10 shrink-0 items-center justify-center self-center rounded-full bg-primary/15 text-primary"
+        aria-hidden
+      >
+        <User className="size-5" />
       </div>
 
-      <div className="flex items-center gap-1">
-        <HeaderAction icon={<List className="size-4" />} label="Session list" />
-        <HeaderAction icon={<Share2 className="size-4" />} label="Share" />
-        <HeaderAction icon={<MessageSquare className="size-4" />} label="Notes" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="truncate font-semibold text-foreground text-sm leading-none">
+          {displayName(meta)}
+        </p>
+        <ul className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground text-xs">
+          {metaItems.map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <li
+                key={item.key}
+                className="flex min-w-0 items-center gap-1"
+              >
+                {idx > 0 && (
+                  <span
+                    aria-hidden
+                    className="select-none text-muted-foreground/40"
+                  >
+                    •
+                  </span>
+                )}
+                {Icon && (
+                  <Icon
+                    className="size-3 shrink-0"
+                    aria-hidden
+                  />
+                )}
+                <span
+                  className={cn(
+                    "truncate",
+                    item.className
+                  )}
+                  title={item.label}
+                >
+                  {item.label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
-  );
-}
-
-function HeaderAction({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      className="inline-flex size-8 items-center justify-center rounded-md border bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
-    >
-      {icon}
-    </button>
   );
 }

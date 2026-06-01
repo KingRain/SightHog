@@ -8,15 +8,25 @@
     "start": "next start -p 3001"
   },
   "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.2.5",
+    "@fontsource/fraunces": "^5.2.5",
     "@sighthog/sdk": "file:../../packages/sdk",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
     "next": "14.2.35",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "rrweb": "^2.0.0-alpha.4",
+    "tailwind-merge": "^2.6.0",
+    "web-vitals": "^4.2.4"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5"
   }
 }

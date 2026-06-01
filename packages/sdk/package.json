@@ -20,12 +20,28 @@
     "build": "tsup",
     "dev": "tsup --watch"
   },
-  "dependencies": {
+  "peerDependencies": {
     "rrweb": "^2.0.0-alpha.4",
     "web-vitals": "^4.2.4"
   },
   "devDependencies": {
+    "rrweb": "^2.0.0-alpha.4",
     "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
-  }
+    "typescript": "^5.7.2",
+    "web-vitals": "^4.2.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "SightHog",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kingrain/sighthog.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/kingrain/sighthog/issues"
+  },
+  "homepage": "https://github.com/kingrain/sighthog#readme"
 }

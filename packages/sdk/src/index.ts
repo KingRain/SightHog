@@ -109,6 +109,10 @@ function buildBatch(
   return batch;
 }
 
+export function captureFullSnapshot(): void {
+  recorderHandle?.captureFullSnapshot();
+}
+
 export function initSightHog(options: SightHogOptions): void {
   if (recorderHandle) {
     return;

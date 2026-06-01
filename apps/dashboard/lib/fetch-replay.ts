@@ -1,5 +1,5 @@
 const POLL_INTERVAL_MS = 2500;
-const MAX_ATTEMPTS = 24;
+const MAX_ATTEMPTS = 36;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,11 +15,16 @@ export async function waitForReplayReady(
       cache: "no-store",
     });
     if (res.ok) {
-      return;
+      const data = (await res.json()) as { hasFullSnapshot?: boolean };
+      if (data.hasFullSnapshot !== false) {
+        return;
+      }
     }
     await sleep(POLL_INTERVAL_MS);
   }
-  throw new Error("Replay is still processing. Try again in a few seconds.");
+  throw new Error(
+    "Replay is still processing (waiting for DOM snapshot). Interact with the demo checkout again, wait ~30s, then retry."
+  );
 }
 
 export async function fetchReplayEvents(sessionId: string) {

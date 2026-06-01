@@ -5,12 +5,15 @@ import {
   Eye,
   Globe,
   Link2,
+  MousePointer2,
   Radio,
   RefreshCw,
   TrendingDown,
   Users,
 } from "lucide-react";
 import type { AnalyticsOverview } from "@/app/api/analytics/overview/route";
+import type { HeatmapResponse } from "@/app/api/analytics/heatmap/route";
+import ClickHeatmap from "@/components/analytics/click-heatmap";
 import { DonutBreakdown } from "@/components/analytics/donut-breakdown";
 import WorldMap from "@/components/analytics/world-map";
 import { Button } from "@/components/ui/button";
@@ -67,6 +70,7 @@ function MetricCard({
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsOverview | null>(null);
+  const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,12 +81,20 @@ export default function AnalyticsPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/analytics/overview", { cache: "no-store" });
-      if (!res.ok) {
+      const [overviewRes, heatmapRes] = await Promise.all([
+        fetch("/api/analytics/overview", { cache: "no-store" }),
+        fetch("/api/analytics/heatmap", { cache: "no-store" }),
+      ]);
+      if (!overviewRes.ok) {
         throw new Error("Failed to load analytics");
       }
-      const json = (await res.json()) as AnalyticsOverview;
+      const json = (await overviewRes.json()) as AnalyticsOverview;
       setData(json);
+      if (heatmapRes.ok) {
+        setHeatmap((await heatmapRes.json()) as HeatmapResponse);
+      } else {
+        setHeatmap({ cells: [], maxClicks: 0, topUrl: null });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -165,8 +177,8 @@ export default function AnalyticsPage() {
         )}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_280px]">
-        <Card className="lg:col-span-1">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <Card className="min-w-0 lg:col-span-1">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Globe className="size-4 text-muted-foreground" />
@@ -178,7 +190,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <Skeleton className="min-h-[320px] w-full" />
+              <Skeleton className="aspect-[2/1] min-h-[480px] w-full" />
             ) : (
               <WorldMap data={data?.topCountries ?? []} />
             )}
@@ -215,6 +227,28 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </section>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <MousePointer2 className="size-4 text-muted-foreground" />
+            <CardTitle className="text-base">Click heatmap</CardTitle>
+          </div>
+          <CardDescription>
+            Aggregated pointer positions from session interactions (40px bins)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="aspect-[3/2] w-full" />
+          ) : (
+            <ClickHeatmap
+              cells={heatmap?.cells ?? []}
+              maxClicks={heatmap?.maxClicks ?? 0}
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <section className="grid gap-4 md:grid-cols-2">
         <Card>

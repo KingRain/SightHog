@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -16,17 +16,13 @@ import {
 } from "lucide-react";
 import { FunnelChart } from "@/components/analytics/funnel-chart";
 import { FrustrationFeed } from "@/components/analytics/frustration-feed";
-import {
-  AverageMetricChart,
-  EventVolumeChart,
-} from "@/components/analytics/metrics-charts";
+import { EventVolumeChart } from "@/components/analytics/metrics-charts";
 import type { FunnelStepResult } from "@/app/api/analytics/funnel/route";
 import type {
   FrustrationSeriesPoint,
   FrustrationUrlRow,
 } from "@/app/api/analytics/frustration/route";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,7 +39,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -55,19 +50,32 @@ import {
 import SessionFilters, {
   type SessionFilterState,
 } from "@/components/SessionFilters";
+import { CountUp } from "@/components/unlumen/count-up";
+import { GlowingBadge } from "@/components/unlumen/glowing-badge";
+import { Kbd } from "@/components/unlumen/kbd";
+import { ShimmerSkeleton } from "@/components/unlumen/shimmer-skeleton";
 import SessionReplayWorkspace from "@/components/SessionReplayWorkspace";
 import SessionTriageBadges from "@/components/SessionTriageBadges";
 import type { SessionListRow } from "@/app/api/sessions/route";
 import { fetchReplayEvents, waitForReplayReady } from "@/lib/fetch-replay";
-import type { SessionMeta } from "@/components/SessionClientHeader";
 import { type LogItem } from "@/components/TechTimeline";
-import {
-  buildTimelineMarkersFromLogs,
-  type TimelineMarker,
-} from "@/lib/session-markers";
+import { buildTimelineMarkersFromLogs } from "@/lib/session-markers";
 import { buildUnifiedTimelineLogs } from "@/lib/timeline-feed";
-import { getSessionStartTimeMs } from "@/lib/replay";
+import { cloneReplayEvents, getSessionStartTimeMs } from "@/lib/replay";
 import type { SessionInteraction } from "@/app/api/session/[id]/interactions/route";
+import { useAppDispatch, useAppSelector } from "@/store";
+import { resetReplay, setSessionStartTimeMs } from "@/store/replaySlice";
+import {
+  clearSessionView,
+  setLoadingReplay,
+  setReplayProcessing,
+  setReplayWaitAttempt,
+  setSelectedSessionId,
+  setSessionEvents,
+  setSessionMeta,
+  setTelemetryLogs,
+  setTimelineMarkers,
+} from "@/store/sessionSlice";
 
 interface MetricRow {
   event_name: string;
@@ -83,23 +91,20 @@ const defaultFilters: SessionFilterState = {
 };
 
 export default function Dashboard() {
+  const dispatch = useAppDispatch();
+  const selectedSession = useAppSelector((s) => s.session.selectedSessionId);
+  const sessionMeta = useAppSelector((s) => s.session.sessionMeta);
+  const loadingReplay = useAppSelector((s) => s.session.loadingReplay);
+  const replayProcessing = useAppSelector((s) => s.session.replayProcessing);
+  const replayWaitAttempt = useAppSelector((s) => s.session.replayWaitAttempt);
+
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [sessions, setSessions] = useState<SessionListRow[]>([]);
   const [sessionFilters, setSessionFilters] =
     useState<SessionFilterState>(defaultFilters);
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
-  const [sessionEvents, setSessionEvents] = useState<unknown[]>([]);
-  const [telemetryLogs, setTelemetryLogs] = useState<LogItem[]>([]);
-  const [timelineMarkers, setTimelineMarkers] = useState<TimelineMarker[]>([]);
-  const [sessionMeta, setSessionMeta] = useState<SessionMeta | null>(null);
-  const [currentVideoTimeMs, setCurrentVideoTimeMs] = useState(0);
-  const [sessionStartTimeMs, setSessionStartTimeMs] = useState(0);
   const [loadingData, setLoadingData] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const [loadingReplay, setLoadingReplay] = useState(false);
-  const [replayProcessing, setReplayProcessing] = useState(false);
-  const [replayWaitAttempt, setReplayWaitAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [funnelSteps, setFunnelSteps] = useState<FunnelStepResult[]>([]);
   const [frustrationSeries, setFrustrationSeries] = useState<
@@ -108,8 +113,6 @@ export default function Dashboard() {
   const [frustrationUrls, setFrustrationUrls] = useState<FrustrationUrlRow[]>(
     []
   );
-  const seekToTimeRef = useRef<(timeMs: number) => void>(() => {});
-
   const demoUrl = process.env.NEXT_PUBLIC_DEMO_URL ?? "http://localhost:3001";
 
   const buildSessionsUrl = useCallback(() => {
@@ -186,10 +189,6 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [sessionFilters, loadSessions]);
 
-  const registerSeek = useCallback((seek: (timeMs: number) => void) => {
-    seekToTimeRef.current = seek;
-  }, []);
-
   const clearAllSessions = async () => {
     if (
       !window.confirm(
@@ -205,11 +204,8 @@ export default function Dashboard() {
       if (!res.ok) {
         throw new Error("Clear failed");
       }
-      setSelectedSession(null);
-      setSessionEvents([]);
-      setTelemetryLogs([]);
-      setTimelineMarkers([]);
-      setSessionMeta(null);
+      dispatch(clearSessionView());
+      dispatch(resetReplay());
       setFunnelSteps([]);
       setFrustrationSeries([]);
       setFrustrationUrls([]);
@@ -222,19 +218,21 @@ export default function Dashboard() {
   };
 
   const loadSessionReplay = async (sessionId: string) => {
-    setLoadingReplay(true);
-    setReplayProcessing(true);
-    setReplayWaitAttempt(0);
+    dispatch(setLoadingReplay(true));
+    dispatch(setReplayProcessing(true));
+    dispatch(setReplayWaitAttempt(0));
     setError(null);
-    setSelectedSession(sessionId);
-    setCurrentVideoTimeMs(0);
-    setTelemetryLogs([]);
-    setTimelineMarkers([]);
-    setSessionMeta(null);
+    dispatch(setSelectedSessionId(sessionId));
+    dispatch(resetReplay());
+    dispatch(setTelemetryLogs([]));
+    dispatch(setTimelineMarkers([]));
+    dispatch(setSessionMeta(null));
 
     try {
-      await waitForReplayReady(sessionId, setReplayWaitAttempt);
-      setReplayProcessing(false);
+      await waitForReplayReady(sessionId, (attempt) =>
+        dispatch(setReplayWaitAttempt(attempt))
+      );
+      dispatch(setReplayProcessing(false));
 
       const [data, telemetryRes, interactionsRes, metaRes] = await Promise.all([
         fetchReplayEvents(sessionId),
@@ -249,11 +247,11 @@ export default function Dashboard() {
       }
       if (data.hasFullSnapshot === false) {
         setError(
-          "Replay is incomplete (missing DOM snapshot). Interact with the demo again, then retry.",
+          "Replay is incomplete (missing DOM snapshot). Interact with the demo checkout again, wait ~30s for the blob worker to flush, then refresh and retry.",
         );
       }
-      setSessionEvents(events);
-      setSessionStartTimeMs(getSessionStartTimeMs(events));
+      dispatch(setSessionEvents(cloneReplayEvents(events)));
+      dispatch(setSessionStartTimeMs(getSessionStartTimeMs(events)));
 
       const rawLogs: LogItem[] = telemetryRes.ok
         ? ((await telemetryRes.json()).logs ?? [])
@@ -264,15 +262,17 @@ export default function Dashboard() {
         : [];
 
       const unifiedLogs = buildUnifiedTimelineLogs(interactions, rawLogs);
-      setTelemetryLogs(unifiedLogs);
-      setTimelineMarkers(buildTimelineMarkersFromLogs(unifiedLogs));
+      dispatch(setTelemetryLogs(unifiedLogs));
+      dispatch(
+        setTimelineMarkers(buildTimelineMarkersFromLogs(unifiedLogs))
+      );
 
       if (metaRes.ok) {
-        setSessionMeta(await metaRes.json());
+        dispatch(setSessionMeta(await metaRes.json()));
       } else {
         const fallback = sessions.find((s) => s.id === sessionId);
         if (fallback) {
-          setSessionMeta({
+          dispatch(setSessionMeta({
             id: fallback.id,
             user_id: fallback.user_id,
             initial_url: fallback.initial_url,
@@ -282,7 +282,7 @@ export default function Dashboard() {
             browser: fallback.browser,
             os: fallback.os,
             created_at: fallback.created_at,
-          });
+          }));
         }
       }
     } catch (err) {
@@ -291,13 +291,13 @@ export default function Dashboard() {
           ? err.message
           : "Could not load session replay. Try again shortly.",
       );
-      setSessionEvents([]);
-      setTelemetryLogs([]);
-      setTimelineMarkers([]);
-      setSessionMeta(null);
+      dispatch(setSessionEvents([]));
+      dispatch(setTelemetryLogs([]));
+      dispatch(setTimelineMarkers([]));
+      dispatch(setSessionMeta(null));
     } finally {
-      setLoadingReplay(false);
-      setReplayProcessing(false);
+      dispatch(setLoadingReplay(false));
+      dispatch(setReplayProcessing(false));
     }
   };
 
@@ -333,9 +333,22 @@ export default function Dashboard() {
         <header className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="success">Live</Badge>
-              <Badge variant="outline">ClickHouse OLAP</Badge>
-              <Badge variant="outline">SeaweedFS Replays</Badge>
+              <GlowingBadge variant="success" pulse>
+                Live
+              </GlowingBadge>
+              <GlowingBadge variant="neutral" pulse={false}>
+                ClickHouse OLAP
+              </GlowingBadge>
+              <GlowingBadge variant="neutral" pulse={false}>
+                SeaweedFS Replays
+              </GlowingBadge>
+              <span className="hidden items-center gap-1 text-[10px] text-muted-foreground sm:inline-flex">
+                <Kbd size="sm">R</Kbd>
+                <span>refresh</span>
+                <span aria-hidden className="mx-0.5 text-muted-foreground/40">·</span>
+                <Kbd size="sm">/</Kbd>
+                <span>search</span>
+              </span>
             </div>
             <div>
               <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
@@ -377,33 +390,51 @@ export default function Dashboard() {
         )}
 
         <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {statCards.map((stat) => (
-            <Card key={stat.title}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardDescription>{stat.title}</CardDescription>
-                    {loadingData ? (
-                      <Skeleton className="mt-3 h-9 w-24" />
-                    ) : (
-                      <CardTitle className="mt-2 text-3xl tabular-nums">
-                        {stat.value}
-                      </CardTitle>
-                    )}
+          {statCards.map((stat) => {
+            const numericValue = Number(
+              stat.value.replace(/[^0-9.\-]/g, ""),
+            );
+            const hasNumeric = !Number.isNaN(numericValue) && numericValue > 0;
+            return (
+              <Card key={stat.title}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <CardDescription>{stat.title}</CardDescription>
+                      {loadingData ? (
+                        <ShimmerSkeleton className="mt-3 h-9 w-24" />
+                      ) : (
+                        <CardTitle className="mt-2 text-3xl tabular-nums">
+                          {hasNumeric ? (
+                            <CountUp
+                              to={numericValue}
+                              from={0}
+                              duration={1.2}
+                              separator=","
+                              decimals={0}
+                            />
+                          ) : (
+                            stat.value
+                          )}
+                        </CardTitle>
+                      )}
+                    </div>
+                    <div className="rounded-lg border bg-muted/50 p-2.5 text-muted-foreground">
+                      <stat.icon className="size-5" />
+                    </div>
                   </div>
-                  <div className="rounded-lg border bg-muted/50 p-2.5 text-muted-foreground">
-                    <stat.icon className="size-5" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-muted-foreground text-sm">{stat.description}</p>
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-muted-foreground text-sm">
+                    {stat.description}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </section>
 
-        <section className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <section className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -416,7 +447,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loadingData ? (
-                <Skeleton className="min-h-[280px] w-full" />
+                <ShimmerSkeleton className="min-h-[280px] w-full" />
               ) : metrics.length === 0 ? (
                 <Empty className="py-10">
                   <EmptyHeader>
@@ -438,37 +469,6 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Activity className="size-5 text-muted-foreground" />
-                <CardTitle>Average Metric Value</CardTitle>
-              </div>
-              <CardDescription>
-                Mean metric_value per event type
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingData ? (
-                <Skeleton className="min-h-[280px] w-full" />
-              ) : metrics.length === 0 ? (
-                <Empty className="py-10">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <Activity />
-                    </EmptyMedia>
-                    <EmptyTitle>No averages yet</EmptyTitle>
-                    <EmptyDescription>
-                      Metrics appear after events are processed by workers.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <AverageMetricChart metrics={metrics} />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <div className="flex items-center gap-2">
                 <Filter className="size-5 text-muted-foreground" />
                 <CardTitle>Conversion Funnel</CardTitle>
               </div>
@@ -478,7 +478,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loadingData ? (
-                <Skeleton className="min-h-[240px] w-full" />
+                <ShimmerSkeleton className="min-h-[240px] w-full" />
               ) : (
                 <FunnelChart steps={funnelSteps} />
               )}
@@ -501,7 +501,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loadingData ? (
-                <Skeleton className="min-h-[280px] w-full" />
+                <ShimmerSkeleton className="min-h-[280px] w-full" />
               ) : (
                 <FrustrationFeed
                   series={frustrationSeries}
@@ -553,13 +553,8 @@ export default function Dashboard() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setSelectedSession(null);
-                      setSessionEvents([]);
-                      setTelemetryLogs([]);
-                      setTimelineMarkers([]);
-                      setSessionMeta(null);
-                      setCurrentVideoTimeMs(0);
-                      setSessionStartTimeMs(0);
+                      dispatch(clearSessionView());
+                      dispatch(resetReplay());
                     }}
                   >
                     <ArrowLeft />
@@ -570,9 +565,9 @@ export default function Dashboard() {
               </div>
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="min-h-0 overflow-hidden">
               {selectedSession ? (
-                <div className="space-y-4">
+                <div className="min-h-0 space-y-4 overflow-hidden">
                   {replayProcessing && (
                     <Alert>
                       <AlertTitle>Processing replay</AlertTitle>
@@ -586,31 +581,21 @@ export default function Dashboard() {
                   )}
                   {loadingReplay ? (
                     <div className="space-y-3">
-                      <Skeleton className="h-16 w-full rounded-xl" />
-                      <Skeleton className="h-10 w-full rounded-lg" />
+                      <ShimmerSkeleton className="h-16 w-full rounded-xl" />
+                      <ShimmerSkeleton className="h-10 w-full rounded-lg" />
                       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
-                        <Skeleton className="h-[420px] w-full rounded-xl" />
-                        <Skeleton className="h-[520px] w-full rounded-xl" />
+                        <ShimmerSkeleton className="h-[420px] w-full rounded-xl" />
+                        <ShimmerSkeleton className="h-[520px] w-full rounded-xl" />
                       </div>
                     </div>
                   ) : sessionMeta ? (
-                    <SessionReplayWorkspace
-                      sessionMeta={sessionMeta}
-                      events={sessionEvents}
-                      logs={telemetryLogs}
-                      timelineMarkers={timelineMarkers}
-                      currentVideoTimeMs={currentVideoTimeMs}
-                      sessionStartTimeMs={sessionStartTimeMs}
-                      onTimeUpdate={setCurrentVideoTimeMs}
-                      onSessionStartTime={setSessionStartTimeMs}
-                      registerSeek={registerSeek}
-                    />
+                    <SessionReplayWorkspace />
                   ) : null}
                 </div>
               ) : loadingData ? (
                 <div className="space-y-3">
                   {Array.from({ length: 4 }).map((_, index) => (
-                    <Skeleton key={index} className="h-12 w-full" />
+                    <ShimmerSkeleton key={index} className="h-12 w-full" />
                   ))}
                 </div>
               ) : sessions.length === 0 ? (

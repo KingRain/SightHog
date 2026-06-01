@@ -177,6 +177,22 @@
   }
 }
 
+@keyframes unlumen-shimmer-sweep {
+  to {
+    transform: translateX(200%);
+  }
+}
+
+.unlumen-shimmer-sweep {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--foreground) 8%, transparent) 50%,
+    transparent 100%
+  );
+  animation: unlumen-shimmer-sweep 1.6s ease-in-out infinite;
+}
+
 .replay-shell .replayer-wrapper {
   border-radius: calc(var(--radius) - 2px);
   overflow: hidden;
@@ -186,7 +202,9 @@
 
 .replay-shell .rr-player {
   width: 100% !important;
+  height: 100% !important;
   max-width: 100% !important;
+  max-height: 100% !important;
   background: var(--card) !important;
   border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
   overflow: hidden;
@@ -285,6 +303,31 @@
   transition: left 0.05s linear;
 }
 
+.replay-shell-embedded .replay-viewport {
+  position: relative;
+  isolation: isolate;
+}
+
+.replay-shell-embedded .replay-player-host {
+  position: absolute;
+  inset: 0;
+}
+
 .replay-shell-embedded .rr-player {
+  float: none !important;
+  margin: 0 auto;
   border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--background) !important;
+}
+
+.replay-shell-embedded .rr-player__frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--background) !important;
+}
+
+.replay-shell-embedded .replayer-wrapper {
+  float: none !important;
+  clear: none !important;
 }

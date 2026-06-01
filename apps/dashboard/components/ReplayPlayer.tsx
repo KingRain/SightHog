@@ -10,11 +10,17 @@ import ReplayControls, {
 } from "@/components/ReplayControls";
 import { type TimelineMarker } from "@/lib/session-markers";
 import {
+  createReplayController,
+  fitReplayerToViewport,
+} from "@/lib/replay-controller";
+import {
   getSessionDurationMs,
   getSessionStartTimeMs,
   hasFullSnapshot,
   prepareReplayEvents,
 } from "@/lib/replay";
+import ReplayHeatmapOverlay from "@/components/replay/ReplayHeatmapOverlay";
+import type { HeatmapCell } from "@/lib/heatmap";
 import {
   Empty,
   EmptyDescription,
@@ -35,6 +41,11 @@ interface ReplayPlayerProps {
   onControllerReady?: (controller: ReplayController | null) => void;
   onPlayStateChange?: (playing: boolean) => void;
   onSpeedChange?: (speed: number) => void;
+  heatmapEnabled?: boolean;
+  heatmapCells?: HeatmapCell[];
+  heatmapMaxClicks?: number;
+  heatmapViewportWidth?: number;
+  heatmapViewportHeight?: number;
 }
 
 function resolveTimePayload(payload: unknown): number {
@@ -62,15 +73,24 @@ export default function ReplayPlayer({
   onControllerReady,
   onPlayStateChange,
   onSpeedChange,
+  heatmapEnabled = false,
+  heatmapCells = [],
+  heatmapMaxClicks = 0,
+  heatmapViewportWidth = 1280,
+  heatmapViewportHeight = 720,
 }: ReplayPlayerProps) {
   const externalChrome = chrome === "external";
+  const viewportRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const playerInstanceRef = useRef<InstanceType<typeof rrwebPlayer> | null>(
     null
   );
+  const controllerRef = useRef<ReplayController | null>(null);
   const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onPlayStateChangeRef = useRef(onPlayStateChange);
+  const onSpeedChangeRef = useRef(onSpeedChange);
   const rafRef = useRef<number | null>(null);
-  const [containerWidth, setContainerWidth] = useState(960);
+  const [containerSize, setContainerSize] = useState({ width: 960, height: 540 });
   const [internalTimeMs, setInternalTimeMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSpeed, setCurrentSpeed] = useState(1);
@@ -89,7 +109,7 @@ export default function ReplayPlayer({
     [baseEvents]
   );
 
-  const totalDurationMs = useMemo(
+  const wallClockDurationMs = useMemo(
     () => getSessionDurationMs(baseEvents),
     [baseEvents]
   );
@@ -100,11 +120,17 @@ export default function ReplayPlayer({
     [baseEvents.length, sessionStartTimeMs, timelineMarkers.length]
   );
 
-  const playerHeight = Math.max(Math.round(containerWidth * (9 / 16)), 360);
-
   useEffect(() => {
     onTimeUpdateRef.current = onTimeUpdate;
   }, [onTimeUpdate]);
+
+  useEffect(() => {
+    onPlayStateChangeRef.current = onPlayStateChange;
+  }, [onPlayStateChange]);
+
+  useEffect(() => {
+    onSpeedChangeRef.current = onSpeedChange;
+  }, [onSpeedChange]);
 
   useEffect(() => {
     if (sessionStartTimeMs > 0) {
@@ -113,41 +139,42 @@ export default function ReplayPlayer({
   }, [sessionStartTimeMs, onSessionStartTime]);
 
   useEffect(() => {
-    onDurationChange?.(totalDurationMs);
-  }, [totalDurationMs, onDurationChange]);
-
-  useEffect(() => {
-    const container = playerRef.current;
-    if (!container) {
+    const viewport = viewportRef.current;
+    if (!viewport) {
       return;
     }
 
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
     const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width;
-      if (!width || width <= 0) {
+      const rect = entries[0]?.contentRect;
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
         return;
       }
-      const nextWidth = Math.min(Math.floor(width), 1024);
+      const next = {
+        width: Math.floor(rect.width),
+        height: Math.floor(rect.height),
+      };
       if (resizeTimer) {
         clearTimeout(resizeTimer);
       }
       resizeTimer = setTimeout(() => {
-        setContainerWidth((prev) =>
-          Math.abs(prev - nextWidth) > 24 ? nextWidth : prev
-        );
-      }, 200);
+        setContainerSize((prev) => {
+          const widthChanged = Math.abs(prev.width - next.width) > 4;
+          const heightChanged = Math.abs(prev.height - next.height) > 4;
+          return widthChanged || heightChanged ? next : prev;
+        });
+      }, 100);
     });
 
-    observer.observe(container);
+    observer.observe(viewport);
     return () => {
       observer.disconnect();
       if (resizeTimer) {
         clearTimeout(resizeTimer);
       }
     };
-  }, []);
+  }, [replayReady]);
 
   useEffect(() => {
     const container = playerRef.current;
@@ -157,19 +184,30 @@ export default function ReplayPlayer({
 
     playerInstanceRef.current?.$destroy?.();
     playerInstanceRef.current = null;
+    controllerRef.current = null;
     setController(null);
     container.innerHTML = "";
 
-    const width = container.clientWidth > 0 ? container.clientWidth : containerWidth;
-    const height = Math.max(Math.round(width * (9 / 16)), 360);
+    const viewportEl = viewportRef.current;
+    const width =
+      viewportEl && viewportEl.clientWidth > 0
+        ? viewportEl.clientWidth
+        : containerSize.width;
+    const height =
+      viewportEl && viewportEl.clientHeight > 0
+        ? viewportEl.clientHeight
+        : containerSize.height;
 
     const player = new rrwebPlayer({
       target: container,
       props: {
         events: baseEvents as never[],
-        width: Math.min(Math.floor(width), 1024),
+        width,
         height,
+        maxScale: 0,
+        speed: 1,
         autoPlay: false,
+        skipInactive: false,
         showController: false,
         inactiveColor:
           "color-mix(in srgb, var(--muted-foreground) 35%, transparent)",
@@ -178,24 +216,20 @@ export default function ReplayPlayer({
     });
 
     playerInstanceRef.current = player;
+    const replayer = player.getReplayer();
 
-    const replayController: ReplayController = {
-      play: () => player.play(),
-      pause: () => player.pause(),
-      toggle: () => player.toggle(),
-      goto: (timeMs: number) => player.goto(timeMs, true),
-      setSpeed: (speed: number) => player.setSpeed(speed),
-      toggleSkipInactive: () => player.toggleSkipInactive(),
-    };
+    const replayController = createReplayController(player);
+    controllerRef.current = replayController;
     setController(replayController);
     onControllerReady?.(replayController);
+
     setIsPlaying(false);
     setCurrentSpeed(1);
     setSkipInactive(false);
-    onPlayStateChange?.(false);
-    onSpeedChange?.(1);
+    onPlayStateChangeRef.current?.(false);
+    onSpeedChangeRef.current?.(1);
 
-    registerSeek?.((timeMs: number) => player.goto(timeMs, true));
+    registerSeek?.((timeMs: number) => replayController.goto(timeMs));
 
     const emitTime = (timeMs: number) => {
       setInternalTimeMs(timeMs);
@@ -207,9 +241,41 @@ export default function ReplayPlayer({
     };
 
     player.addEventListener("ui-update-current-time", handleTimeUpdate);
-    emitTime(0);
 
-    const replayer = player.getReplayer();
+    const syncViewport = () => {
+      fitReplayerToViewport(container, width, height);
+    };
+
+    player.addEventListener("resize", syncViewport);
+    replayer.on("resize", syncViewport);
+    replayer.on("start", () => {
+      setIsPlaying(true);
+      onPlayStateChangeRef.current?.(true);
+    });
+    replayer.on("pause", () => {
+      setIsPlaying(false);
+      onPlayStateChangeRef.current?.(false);
+    });
+    replayer.on("finish", () => {
+      setIsPlaying(false);
+      onPlayStateChangeRef.current?.(false);
+    });
+
+    requestAnimationFrame(syncViewport);
+    setTimeout(syncViewport, 50);
+    setTimeout(syncViewport, 250);
+
+    let replayDurationMs = wallClockDurationMs;
+    try {
+      const metadata = player.getMetaData();
+      if (metadata.totalTime > 0) {
+        replayDurationMs = metadata.totalTime;
+      }
+    } catch {
+      // Fall back to wall-clock span.
+    }
+    onDurationChange?.(replayDurationMs);
+
     const pollTime = () => {
       if (playerInstanceRef.current !== player) {
         return;
@@ -226,6 +292,8 @@ export default function ReplayPlayer({
     };
     rafRef.current = requestAnimationFrame(pollTime);
 
+    emitTime(0);
+
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
@@ -235,6 +303,7 @@ export default function ReplayPlayer({
         player.$destroy?.();
         playerInstanceRef.current = null;
       }
+      controllerRef.current = null;
       setController(null);
       onControllerReady?.(null);
       container.innerHTML = "";
@@ -243,11 +312,19 @@ export default function ReplayPlayer({
   }, [eventsKey, replayReady]);
 
   useEffect(() => {
-    playerInstanceRef.current?.triggerResize?.();
-  }, [containerWidth, playerHeight]);
+    const container = playerRef.current;
+    if (!container || !playerInstanceRef.current) {
+      return;
+    }
+    fitReplayerToViewport(
+      container,
+      containerSize.width,
+      containerSize.height
+    );
+  }, [containerSize]);
 
   const handleSeek = useCallback((timeMs: number) => {
-    playerInstanceRef.current?.goto(timeMs, true);
+    controllerRef.current?.goto(timeMs);
     setInternalTimeMs(timeMs);
     onTimeUpdateRef.current?.(timeMs);
   }, []);
@@ -296,14 +373,31 @@ export default function ReplayPlayer({
     <div
       className={
         externalChrome
-          ? "replay-shell-embedded relative w-full overflow-hidden bg-background"
+          ? "replay-shell-embedded flex h-full min-h-0 w-full flex-col overflow-hidden"
           : "replay-shell relative w-full overflow-hidden rounded-2xl border bg-card"
       }
     >
       <div
-        ref={playerRef}
-        className="replay-player-host mx-auto w-full [&_.rr-player]:mx-auto [&_.rr-player]:max-w-full [&_.rr-controller]:hidden"
-      />
+        ref={viewportRef}
+        className={
+          externalChrome
+            ? "replay-viewport relative min-h-0 flex-1 overflow-hidden bg-muted/30"
+            : "relative w-full"
+        }
+      >
+        <div
+          ref={playerRef}
+          className="replay-player-host absolute inset-0 [&_.rr-controller]:hidden"
+        />
+        <ReplayHeatmapOverlay
+          hostRef={playerRef}
+          active={heatmapEnabled}
+          cells={heatmapCells}
+          maxClicks={heatmapMaxClicks}
+          viewportWidth={heatmapViewportWidth}
+          viewportHeight={heatmapViewportHeight}
+        />
+      </div>
       {!externalChrome && (
         <div className="replay-chrome border-t border-border/80 bg-[color-mix(in_srgb,var(--card)_82%,var(--foreground))]">
           <ReplayControls
@@ -323,7 +417,7 @@ export default function ReplayPlayer({
           />
           <CustomTimeline
             currentTimeMs={currentTimeMs}
-            totalDurationMs={totalDurationMs}
+            totalDurationMs={wallClockDurationMs}
             sessionStartTimeMs={sessionStartTimeMs}
             markers={timelineMarkers}
             onSeek={handleSeek}

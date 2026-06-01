@@ -1,6 +1,12 @@
 # SightHog
 
-SightHog captures browser sessions (DOM replay, clicks, network, console) and stores them for analytics and playback in a dashboard.
+[![SightHog landing page](docs/images/hero.png)](https://sighthog.vercel.app)
+
+**[sighthog.vercel.app](https://sighthog.vercel.app)** — landing page, features, and full documentation.
+
+SightHog is a drop-in browser SDK that records rrweb session replay, rage-clicks, web vitals, and network logs — then ships them to your own Kafka, Postgres, and ClickHouse. Open source, self-hosted, no per-seat fees.
+
+For setup guides, architecture docs, API reference, and privacy details, see the **[documentation on the landing site](https://sighthog.vercel.app)**.
 
 ## Architecture
 
@@ -33,14 +39,6 @@ Browser (SDK on demo store)
 
 The demo store is a separate Next.js app on port 3001. It uses client-side routing across multiple pages while keeping one `sessionId` in `sessionStorage`, so you should see a single session row after browsing Home, Catalog, Product, Cart, and Checkout.
 
-## Screenshots
-
-<!-- Add architecture diagram image here -->
-<!-- docs/images/architecture.png -->
-
-<!-- Add dashboard replay screenshot here -->
-<!-- docs/images/replay-workspace.png -->
-
 ## Prerequisites
 
 - Docker Desktop (recommended for full stack)
@@ -48,6 +46,8 @@ The demo store is a separate Next.js app on port 3001. It uses client-side routi
 - Go 1.22+ (optional, for ingest API development)
 
 ## Quick start (Docker)
+
+Full install steps and SDK usage are in the **[docs](https://sighthog.vercel.app)**. To run the stack locally:
 
 ```bash
 cp .env.example .env

@@ -1,3 +1,4 @@
+import { isFullSnapshotEvent } from "./rrweb-events";
 import type { InteractionEvent, TelemetryLog } from "./types";
 
 const DEFAULT_MAX_BATCH_SIZE = 500;
@@ -19,6 +20,7 @@ export class Batcher {
   private interactions: InteractionEvent[] = [];
   private telemetry: TelemetryLog[] = [];
   private telemetryCount = 0;
+  private hasFullSnapshot = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly flushIntervalMs: number;
   private readonly maxBatchSize: number;
@@ -47,7 +49,12 @@ export class Batcher {
 
   addEvent(event: unknown): void {
     this.events.push(event);
-    if (this.events.length >= this.maxBatchSize) {
+    if (isFullSnapshotEvent(event)) {
+      this.hasFullSnapshot = true;
+      this.flush(false);
+      return;
+    }
+    if (this.hasFullSnapshot && this.events.length >= this.maxBatchSize) {
       this.flush(false);
     }
   }
@@ -65,18 +72,22 @@ export class Batcher {
   }
 
   flush(useBeacon: boolean): void {
+    const canSendEvents = this.hasFullSnapshot || useBeacon;
+    const events = canSendEvents ? this.events : [];
+    const interactions = this.interactions;
+    const telemetry = this.telemetry;
+
     if (
-      this.events.length === 0 &&
-      this.interactions.length === 0 &&
-      this.telemetry.length === 0
+      events.length === 0 &&
+      interactions.length === 0 &&
+      telemetry.length === 0
     ) {
       return;
     }
 
-    const events = this.events;
-    const interactions = this.interactions;
-    const telemetry = this.telemetry;
-    this.events = [];
+    if (canSendEvents) {
+      this.events = [];
+    }
     this.interactions = [];
     this.telemetry = [];
     this.telemetryCount = 0;

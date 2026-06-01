@@ -1,12 +1,7 @@
 "use client";
 
 import { memo, useMemo } from "react";
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  ZoomableGroup,
-} from "react-simple-maps";
+import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 
 const GEO_URL =
   "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -36,50 +31,41 @@ function WorldMap({ data }: WorldMapProps) {
   const peak = maxVisits(data);
 
   return (
-    <div className="h-full min-h-[320px] w-full">
+    <div className="pointer-events-none aspect-[2/1] min-h-[480px] w-full overflow-hidden">
       <ComposableMap
         projection="geoEqualEarth"
-        className="h-full w-full"
         style={{ width: "100%", height: "100%" }}
       >
-        <ZoomableGroup center={[0, 20]} zoom={1}>
-          <Geographies geography={GEO_URL}>
-            {({ geographies }) =>
-              geographies.map((geo) => {
-                const props = geo.properties as {
-                  iso_a2?: string;
-                  ISO_A2?: string;
-                };
-                const iso = (props.iso_a2 ?? props.ISO_A2 ?? "").toUpperCase();
-                const visits = byCode.get(iso) ?? 0;
-                const ratio = visits / peak;
+        <Geographies geography={GEO_URL}>
+          {({ geographies }) =>
+            geographies.map((geo) => {
+              const props = geo.properties as {
+                iso_a2?: string;
+                ISO_A2?: string;
+              };
+              const iso = (props.iso_a2 ?? props.ISO_A2 ?? "").toUpperCase();
+              const visits = byCode.get(iso) ?? 0;
+              const ratio = visits / peak;
 
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill={
-                      visits > 0
-                        ? colorForIntensity(ratio)
-                        : "var(--muted)"
-                    }
-                    stroke="var(--border)"
-                    strokeWidth={0.4}
-                    style={{
-                      default: { outline: "none" },
-                      hover: {
-                        fill: visits > 0 ? "rgba(79, 70, 229, 0.9)" : "var(--accent)",
-                        outline: "none",
-                        cursor: visits > 0 ? "pointer" : "default",
-                      },
-                      pressed: { outline: "none" },
-                    }}
-                  />
-                );
-              })
-            }
-          </Geographies>
-        </ZoomableGroup>
+              return (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill={
+                    visits > 0 ? colorForIntensity(ratio) : "var(--muted)"
+                  }
+                  stroke="var(--border)"
+                  strokeWidth={0.4}
+                  style={{
+                    default: { outline: "none" },
+                    hover: { outline: "none", fill: "var(--muted)" },
+                    pressed: { outline: "none" },
+                  }}
+                />
+              );
+            })
+          }
+        </Geographies>
       </ComposableMap>
     </div>
   );
