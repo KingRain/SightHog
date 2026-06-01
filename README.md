@@ -1,12 +1,13 @@
 # SightHog
 
-[![SightHog landing page](docs/images/hero.png)](https://sight-hog.vercel.app)
+[![SightHog landing page](docs/images/hero.png)](https://sight-hog.vercel.app/)
 
-**[sight-hog.vercel.app](https://sight-hog.vercel.app)** — landing page, features, and full documentation.
+**Website:** [sight-hog.vercel.app](https://sight-hog.vercel.app/)  
+**Documentation:** [sight-hog.vercel.app/docs](https://sight-hog.vercel.app/docs)
 
 SightHog is a drop-in browser SDK that records rrweb session replay, rage-clicks, web vitals, and network logs — then ships them to your own Kafka, Postgres, and ClickHouse. Open source, self-hosted, no per-seat fees.
 
-For setup guides, architecture docs, API reference, and privacy details, see the **[documentation on the landing site](https://sight-hog.vercel.app)**.
+For setup guides, architecture docs, API reference, and privacy details, see **[sight-hog.vercel.app/docs](https://sight-hog.vercel.app/docs)**.
 
 ## Architecture
 
@@ -47,7 +48,7 @@ The demo store is a separate Next.js app on port 3001. It uses client-side routi
 
 ## Quick start (Docker)
 
-Full install steps and SDK usage are in the **[docs](https://sight-hog.vercel.app)**. To run the stack locally:
+Full install steps and SDK usage are in the **[docs](https://sight-hog.vercel.app/docs)**. To run the stack locally:
 
 ```bash
 cp .env.example .env
