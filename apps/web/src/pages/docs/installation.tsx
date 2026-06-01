@@ -29,21 +29,30 @@ export function DocsInstallation() {
       <DocsH2 id="install-sdk">Install the SDK</DocsH2>
       <DocsP>
         The SDK is published to npm as{" "}
-        <code className="font-mono text-sm">@sighthog/sdk</code>. It has one
-        runtime peer: <code className="font-mono text-sm">rrweb</code>.
+        <a
+          className="font-mono text-sm text-foreground underline decoration-primary/40 underline-offset-4 hover:decoration-primary"
+          href="https://www.npmjs.com/package/@httperror/sighthog"
+          target="_blank"
+          rel="noreferrer"
+        >
+          @httperror/sighthog
+        </a>
+        . Install peer dependencies{" "}
+        <code className="font-mono text-sm">rrweb</code> and{" "}
+        <code className="font-mono text-sm">web-vitals</code> alongside the SDK.
       </DocsP>
       <div className="mt-5">
         <CodeBlock
           language="bash"
           filename="terminal"
           code={`# npm
-npm install @sighthog/sdk
+npm install @httperror/sighthog rrweb web-vitals
 
 # pnpm
-pnpm add @sighthog/sdk
+pnpm add @httperror/sighthog rrweb web-vitals
 
 # yarn
-yarn add @sighthog/sdk`}
+yarn add @httperror/sighthog rrweb web-vitals`}
         />
       </div>
 
@@ -70,7 +79,7 @@ yarn add @sighthog/sdk`}
         <CodeBlock
           language="tsx"
           filename="app.tsx"
-          code={`import { initSightHog } from "@sighthog/sdk";
+          code={`import { initSightHog } from "@httperror/sighthog";
 
 initSightHog({
   endpoint: "https://ingest.your-app.com/v1/events",

@@ -1,6 +1,8 @@
-# @sighthog/sdk
+# @httperror/sighthog
 
 The official browser telemetry and session replay SDK for **SightHog**.
+
+> **Publishing:** See [PUBLISHING.md](./PUBLISHING.md). Package name on npm: `@httperror/sighthog`.
 
 SightHog captures pixel-accurate DOM replay (via `rrweb`), user interactions (clicks, scrolls, custom events), browser logs (console logs, unhandled exceptions), network performance, and Core Web Vitals to deliver a complete dashboard for session playback and product analytics.
 
@@ -19,17 +21,17 @@ SightHog captures pixel-accurate DOM replay (via `rrweb`), user interactions (cl
 
 ## Installation
 
-Install the SDK via your preferred package manager. Since `@sighthog/sdk` delegates DOM recording and metric capture to peer packages, make sure `rrweb` and `web-vitals` are also installed.
+Install the SDK via your preferred package manager. Since `@httperror/sighthog` delegates DOM recording and metric capture to peer packages, make sure `rrweb` and `web-vitals` are also installed.
 
 ```bash
 # Using npm
-npm install @sighthog/sdk rrweb web-vitals
+npm install @httperror/sighthog rrweb web-vitals
 
 # Using pnpm
-pnpm add @sighthog/sdk rrweb web-vitals
+pnpm add @httperror/sighthog rrweb web-vitals
 
 # Using yarn
-yarn add @sighthog/sdk rrweb web-vitals
+yarn add @httperror/sighthog rrweb web-vitals
 ```
 
 ---
@@ -39,7 +41,7 @@ yarn add @sighthog/sdk rrweb web-vitals
 Initialize the SDK once as early as possible in your application's entry point (e.g., `index.js`, `app.tsx`, or a React/Next.js root provider).
 
 ```typescript
-import { initSightHog } from "@sighthog/sdk";
+import { initSightHog } from "@httperror/sighthog";
 
 initSightHog({
   endpoint: "https://ingest.your-app.com/v1/events",

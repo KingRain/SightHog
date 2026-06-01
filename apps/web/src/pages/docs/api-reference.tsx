@@ -24,7 +24,7 @@ export function DocsApiReference() {
       <DocsHeading
         eyebrow="SDK Reference"
         title="API reference."
-        description="The complete public surface of @sighthog/sdk. All exports are tree-shakeable."
+        description="The complete public surface of @httperror/sighthog. All exports are tree-shakeable."
       />
 
       <Callout variant="info" title="Stable surface">
@@ -65,7 +65,7 @@ export function DocsApiReference() {
         <CodeBlock
           language="ts"
           filename="src/auth/logout.ts"
-          code={`import { stopSightHog } from "@sighthog/sdk";
+          code={`import { stopSightHog } from "@httperror/sighthog";
 
 export function signOut() {
   stopSightHog();
@@ -92,7 +92,7 @@ export function signOut() {
         <CodeBlock
           language="ts"
           filename="src/checkout.ts"
-          code={`import { trackEvent } from "@sighthog/sdk";
+          code={`import { trackEvent } from "@httperror/sighthog";
 
 trackEvent("checkout_complete", cartTotal, {
   itemCount: cart.items.length,
@@ -111,7 +111,7 @@ trackEvent("checkout_complete", cartTotal, {
       <div className="mt-4">
         <CodeBlock
           language="ts"
-          code={`import { getSightHogSessionId } from "@sighthog/sdk";
+          code={`import { getSightHogSessionId } from "@httperror/sighthog";
 
 const sid = getSightHogSessionId();`}
         />
@@ -124,7 +124,7 @@ const sid = getSightHogSessionId();`}
       <div className="mt-4">
         <CodeBlock
           language="ts"
-          code={`import { getSightHogVisitorId } from "@sighthog/sdk";
+          code={`import { getSightHogVisitorId } from "@httperror/sighthog";
 
 const vid = getSightHogVisitorId();`}
         />
@@ -151,7 +151,7 @@ const vid = getSightHogVisitorId();`}
   EventBatch,
   InteractionEvent,
   TelemetryLog,
-} from "@sighthog/sdk";`}
+} from "@httperror/sighthog";`}
         />
       </div>
 

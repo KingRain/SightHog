@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
-import { captureFullSnapshot, initSightHog } from "@sighthog/sdk";
+import { captureFullSnapshot, initSightHog } from "@httperror/sighthog";
 
 export default function SightHogProvider({
   children,

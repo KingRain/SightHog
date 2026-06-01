@@ -10,7 +10,7 @@
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.2.5",
     "@fontsource/fraunces": "^5.2.5",
-    "@sighthog/sdk": "file:../../packages/sdk",
+    "@httperror/sighthog": "file:../../packages/sdk",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
     "next": "14.2.35",

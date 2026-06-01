@@ -39,7 +39,7 @@ export function DocsQuickStart() {
         <CodeBlock
           language="tsx"
           filename="src/main.tsx"
-          code={`import { initSightHog } from "@sighthog/sdk";
+          code={`import { initSightHog } from "@httperror/sighthog";
 
 initSightHog({
   endpoint: "https://ingest.your-app.com/v1/events",
@@ -65,7 +65,7 @@ initSightHog({
         <CodeBlock
           language="tsx"
           filename="src/auth/login.ts"
-          code={`import { initSightHog, resetSightHogSession } from "@sighthog/sdk";
+          code={`import { initSightHog, resetSightHogSession } from "@httperror/sighthog";
 
 // after sign-in
 initSightHog({
@@ -85,7 +85,7 @@ initSightHog({
         <CodeBlock
           language="tsx"
           filename="src/cart/checkout.tsx"
-          code={`import { trackEvent } from "@sighthog/sdk";
+          code={`import { trackEvent } from "@httperror/sighthog";
 
 function completeCheckout(cartValue: number) {
   trackEvent("checkout_complete", cartValue);
@@ -110,7 +110,7 @@ function addToCart(sku: string, price: number) {
           code={`import {
   getSightHogSessionId,
   getSightHogVisitorId,
-} from "@sighthog/sdk";
+} from "@httperror/sighthog";
 
 function openSupportTicket() {
   const sessionId = getSightHogSessionId();
@@ -136,7 +136,7 @@ function openSupportTicket() {
         <CodeBlock
           language="tsx"
           filename="src/auth/logout.ts"
-          code={`import { stopSightHog, resetSightHogSession } from "@sighthog/sdk";
+          code={`import { stopSightHog, resetSightHogSession } from "@httperror/sighthog";
 
 export async function signOut() {
   await fetch("/api/auth/logout", { method: "POST" });
@@ -157,7 +157,7 @@ export async function signOut() {
         <CodeBlock
           language="tsx"
           filename="src/main.tsx"
-          code={`import { initSightHog, trackEvent } from "@sighthog/sdk";
+          code={`import { initSightHog, trackEvent } from "@httperror/sighthog";
 
 // 1. Boot the SDK as early as possible.
 initSightHog({

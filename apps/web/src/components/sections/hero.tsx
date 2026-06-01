@@ -11,8 +11,8 @@ const SETUP_STEPS = [
     step: "01",
     title: "Install",
     icon: <Terminal className="size-3.5" strokeWidth={1.5} />,
-    code: "npm install @sighthog/sdk",
-    hint: "one package, zero peers",
+    code: "npm install @httperror/sighthog rrweb web-vitals",
+    hint: "SDK + peer deps from npm",
   },
   {
     step: "02",

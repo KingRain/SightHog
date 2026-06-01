@@ -1,5 +1,5 @@
 {
-  "name": "@sighthog/sdk",
+  "name": "@httperror/sighthog",
   "version": "0.1.0",
   "description": "SightHog browser telemetry SDK with rrweb",
   "type": "module",
@@ -18,7 +18,9 @@
   ],
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build",
+    "publish:public": "npm publish --access public"
   },
   "peerDependencies": {
     "rrweb": "^2.0.0-alpha.4",
@@ -43,5 +45,5 @@
   "bugs": {
     "url": "https://github.com/kingrain/sighthog/issues"
   },
-  "homepage": "https://github.com/kingrain/sighthog#readme"
+  "homepage": "https://sighthog.vercel.app"
 }

@@ -209,7 +209,7 @@ export function DocsConfiguration() {
           language="tsx"
           filename="src/main.tsx"
           code={`// safe to import on the server; initSightHog() is a no-op there.
-import { initSightHog } from "@sighthog/sdk";
+import { initSightHog } from "@httperror/sighthog";
 
 if (typeof window !== "undefined") {
   initSightHog({ endpoint: "..." });

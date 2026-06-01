@@ -1,4 +1,4 @@
-import { trackEvent } from "@sighthog/sdk";
+import { trackEvent } from "@httperror/sighthog";
 
 export function trackFunnelViewProduct(): void {
   trackEvent("funnel_view_product");

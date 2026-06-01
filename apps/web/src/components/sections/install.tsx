@@ -11,13 +11,13 @@ const SNIPPETS = {
   install: {
     label: "Install",
     icon: <Terminal className="size-3" strokeWidth={1.5} />,
-    code: "npm install @sighthog/sdk",
+    code: "npm install @httperror/sighthog rrweb web-vitals",
     language: "bash" as const,
   },
   init: {
     label: "Initialize",
     icon: <Zap className="size-3" strokeWidth={1.5} />,
-    code: `import { initSightHog, trackEvent } from "@sighthog/sdk";
+    code: `import { initSightHog, trackEvent } from "@httperror/sighthog";
 
 initSightHog({
   endpoint: "https://ingest.your-app.com/v1/events",

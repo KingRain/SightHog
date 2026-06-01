@@ -74,9 +74,16 @@ export function DocsIntro() {
       <div className="mt-4">
         <DocsList>
           <DocsLi>
-            <code className="font-mono text-sm">@sighthog/sdk</code> — a
-            browser SDK (rrweb replay, click telemetry, web vitals, frustration
-            detection)
+            <a
+              className="font-mono text-sm underline decoration-primary/40 underline-offset-4 hover:decoration-primary"
+              href="https://www.npmjs.com/package/@httperror/sighthog"
+              target="_blank"
+              rel="noreferrer"
+            >
+              @httperror/sighthog
+            </a>{" "}
+            — browser SDK on npm (rrweb replay, click telemetry, web vitals,
+            frustration detection)
           </DocsLi>
           <DocsLi>
             <code className="font-mono text-sm">ingest-api</code> — a Go HTTP

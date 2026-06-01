@@ -141,7 +141,7 @@ export function DocsPrivacy() {
         <CodeBlock
           language="tsx"
           filename="src/main.tsx"
-          code={`import { initSightHog } from "@sighthog/sdk";
+          code={`import { initSightHog } from "@httperror/sighthog";
 
 function onConsentAccepted() {
   initSightHog({

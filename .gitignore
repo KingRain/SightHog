@@ -16,3 +16,5 @@ apps/dashboard/node_modules/
 infra/geoip/*.mmdb
 GeoLite2-Country.mmdb
 *.mmdb
+.npmrc
+tmp-session*.json
